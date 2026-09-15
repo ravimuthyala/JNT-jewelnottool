@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../utils/image_cache_utils.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import 'notifications_page.dart';
@@ -992,47 +993,75 @@ class _ClientHomeArtistPortfolioPageState
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadPortfolioFeed,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                children: <Widget>[
-                  const SizedBox(height: 4),
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 28, bottom: 20),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_tiles.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 10, bottom: 20),
-                      child: Text(
-                        'No portfolio images available right now.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.black.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    )
-                  else
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _tiles.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 0.78,
-                          ),
-                      itemBuilder: (context, index) {
-                        final tile = _tiles[index];
-                        return _PortfolioTile(
-                          data: tile,
-                          onTap: () => _openImagePreview(tile.imagePath),
-                        );
-                      },
+              // CustomScrollView + SliverGrid (rather than a shrink-wrapped
+              // GridView.builder inside a ListView) so tiles are only built
+              // and their images decoded as they scroll into view -- with
+              // shrinkWrap:true the grid had to lay out every tile up front,
+              // which was decoding dozens of portfolio images on the main
+              // thread the moment this page loaded and caused sustained
+              // frame drops.
+              child: CustomScrollView(
+                slivers: <Widget>[
+                  SliverPadding(
+                    padding: responsivePagePadding(
+                      context,
+                      phone: const EdgeInsets.fromLTRB(16, 10, 16, 16),
                     ),
+                    sliver: SliverMainAxisGroup(
+                      slivers: <Widget>[
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 4),
+                        ),
+                        if (_loading)
+                          const SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.only(top: 28, bottom: 20),
+                              child: Center(child: CircularProgressIndicator()),
+                            ),
+                          )
+                        else if (_tiles.isEmpty)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 10, bottom: 20),
+                              child: Text(
+                                'No portfolio images available right now.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          SliverGrid(
+                            gridDelegate: isTabletSize(MediaQuery.sizeOf(context))
+                                ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 280,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 0.78,
+                                  )
+                                : const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 12,
+                                    mainAxisSpacing: 12,
+                                    childAspectRatio: 0.78,
+                                  ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final tile = _tiles[index];
+                                return _PortfolioTile(
+                                  data: tile,
+                                  onTap: () => _openImagePreview(tile.imagePath),
+                                );
+                              },
+                              childCount: _tiles.length,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

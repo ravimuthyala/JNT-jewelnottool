@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:app_links/app_links.dart';
 import 'package:country_code_picker/country_code_picker.dart';
@@ -18,6 +19,7 @@ import 'pages/reset_password_success_page.dart';
 import 'config/environment.dart';
 import 'theme/app_colors.dart';
 import 'utlis/responsive_text.dart';
+import 'utlis/responsive_layout.dart';
 import 'services/supabase_bootstrap.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -51,6 +53,28 @@ Future<void> main() async {
 
 Future<void> _startApp() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Detect the physical display rather than the current Flutter view. During
+  // a cold launch/session restore, the view can briefly report a stale or
+  // letterboxed phone-sized window before Android/iOS delivers final metrics.
+  // The display size is stable, so cold launch and hot restart now classify
+  // the same device identically.
+  final platformView = WidgetsBinding.instance.platformDispatcher.views.first;
+  final display = platformView.display;
+  final devicePixelRatio = display.devicePixelRatio <= 0
+      ? 1.0
+      : display.devicePixelRatio;
+  final logicalDisplaySize = display.size / devicePixelRatio;
+  final hasValidDisplaySize =
+      logicalDisplaySize.width > 0 && logicalDisplaySize.height > 0;
+
+  // If native display metrics are not ready, leave rotation unrestricted
+  // instead of incorrectly forcing a tablet into portrait phone letterboxing.
+  final isTablet = !hasValidDisplaySize || isTabletSize(logicalDisplaySize);
+  await SystemChrome.setPreferredOrientations(
+    isTablet
+        ? DeviceOrientation.values
+        : [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
+  );
   runApp(const _AppBootstrapper());
 }
 
@@ -124,6 +148,65 @@ class _LogoSplash extends StatelessWidget {
   }
 }
 
+/// Shown on app resume when the restored session belongs to an account an
+/// admin has deactivated (see AccountDeactivatedException). The session is
+/// already signed out by this point, so the only way forward is back to the
+/// public landing page's sign-in flow.
+class _AccountDeactivatedPage extends StatelessWidget {
+  const _AccountDeactivatedPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.blackCat,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.block_rounded,
+                  size: 48,
+                  color: AppColors.snow,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Account Deactivated',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.snow,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Your account has been deactivated. Contact support for help.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.snow.withValues(alpha: 0.75),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HomePage()),
+                    );
+                  },
+                  child: const Text('Back to Sign In'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Restores Supabase's persisted session and sends every supported account
 /// role directly to its signed-in shell. The public landing page is only
 /// shown when there is no session (normally after an explicit logout).
@@ -153,7 +236,11 @@ class _SessionHomeGateState extends State<_SessionHomeGate> {
     if (auth.currentSession == null) {
       return const HomePage();
     }
-    return await LoginDialog.restoredSessionHome() ?? const HomePage();
+    try {
+      return await LoginDialog.restoredSessionHome() ?? const HomePage();
+    } on AccountDeactivatedException {
+      return const _AccountDeactivatedPage();
+    }
   }
 
   Future<void> _waitForSessionRestoration(GoTrueClient auth) async {
@@ -380,197 +467,219 @@ class JntApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _DeepLinkBootstrap(
-      child: MaterialApp(
-        navigatorKey: navigatorKey,
-        title: 'JewelNotTool',
-        debugShowCheckedModeBanner: false,
-        themeMode: ThemeMode.light,
+    return _AccountStatusWatchdog(
+      child: _DeepLinkBootstrap(
+        child: MaterialApp(
+          navigatorKey: navigatorKey,
+          navigatorObservers: [jntRouteObserver],
+          title: 'JewelNotTool',
+          debugShowCheckedModeBanner: false,
+          themeMode: ThemeMode.light,
 
-        localizationsDelegates: const [
-          CountryLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
+          localizationsDelegates: const [
+            CountryLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
 
-        supportedLocales: const [Locale('en')],
+          supportedLocales: const [Locale('en')],
 
-        theme: ThemeData(
-          useMaterial3: true,
-          fontFamily: 'Arial',
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: AppColors.blackCat,
-            brightness: Brightness.light,
-          ),
-          scaffoldBackgroundColor: const Color(0xFF292222),
-          canvasColor: const Color(0xFF292222),
-          textSelectionTheme: const TextSelectionThemeData(
-            cursorColor: AppColors.blackCat,
-            selectionColor: AppColors.alabaster,
-            selectionHandleColor: AppColors.blackCat,
-          ),
-          iconTheme: const IconThemeData(color: AppColors.blackCat),
-          iconButtonTheme: IconButtonThemeData(
-            style: IconButton.styleFrom(foregroundColor: AppColors.blackCat),
-          ),
-          textTheme: ThemeData.light().textTheme
-              .apply(
-                bodyColor: AppColors.blackCat,
-                displayColor: AppColors.blackCat,
-              )
-              .copyWith(
-                displayLarge: ThemeData.light().textTheme.displayLarge
-                    ?.copyWith(color: AppColors.blackCat),
-                displayMedium: ThemeData.light().textTheme.displayMedium
-                    ?.copyWith(color: AppColors.blackCat),
-                displaySmall: ThemeData.light().textTheme.displaySmall
-                    ?.copyWith(color: AppColors.blackCat),
-                headlineLarge: ThemeData.light().textTheme.headlineLarge
-                    ?.copyWith(color: AppColors.blackCat),
-                headlineMedium: ThemeData.light().textTheme.headlineMedium
-                    ?.copyWith(color: AppColors.blackCat),
-                headlineSmall: ThemeData.light().textTheme.headlineSmall
-                    ?.copyWith(color: AppColors.blackCat),
-                titleLarge: ThemeData.light().textTheme.titleLarge?.copyWith(
-                  color: AppColors.blackCat,
+          theme: ThemeData(
+            useMaterial3: true,
+            fontFamily: 'Arial',
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.blackCat,
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF292222),
+            canvasColor: const Color(0xFF292222),
+            textSelectionTheme: const TextSelectionThemeData(
+              cursorColor: AppColors.blackCat,
+              selectionColor: AppColors.alabaster,
+              selectionHandleColor: AppColors.blackCat,
+            ),
+            iconTheme: const IconThemeData(color: AppColors.blackCat),
+            iconButtonTheme: IconButtonThemeData(
+              style: IconButton.styleFrom(foregroundColor: AppColors.blackCat),
+            ),
+            textTheme: ThemeData.light().textTheme
+                .apply(
+                  bodyColor: AppColors.blackCat,
+                  displayColor: AppColors.blackCat,
+                )
+                .copyWith(
+                  displayLarge: ThemeData.light().textTheme.displayLarge
+                      ?.copyWith(color: AppColors.blackCat),
+                  displayMedium: ThemeData.light().textTheme.displayMedium
+                      ?.copyWith(color: AppColors.blackCat),
+                  displaySmall: ThemeData.light().textTheme.displaySmall
+                      ?.copyWith(color: AppColors.blackCat),
+                  headlineLarge: ThemeData.light().textTheme.headlineLarge
+                      ?.copyWith(color: AppColors.blackCat),
+                  headlineMedium: ThemeData.light().textTheme.headlineMedium
+                      ?.copyWith(color: AppColors.blackCat),
+                  headlineSmall: ThemeData.light().textTheme.headlineSmall
+                      ?.copyWith(color: AppColors.blackCat),
+                  titleLarge: ThemeData.light().textTheme.titleLarge?.copyWith(
+                    color: AppColors.blackCat,
+                  ),
+                  titleMedium: ThemeData.light().textTheme.titleMedium
+                      ?.copyWith(color: AppColors.blackCat),
+                  titleSmall: ThemeData.light().textTheme.titleSmall?.copyWith(
+                    color: AppColors.blackCat,
+                  ),
                 ),
-                titleMedium: ThemeData.light().textTheme.titleMedium?.copyWith(
-                  color: AppColors.blackCat,
-                ),
-                titleSmall: ThemeData.light().textTheme.titleSmall?.copyWith(
-                  color: AppColors.blackCat,
-                ),
-              ),
-          primaryTextTheme: ThemeData.light().primaryTextTheme.apply(
-            bodyColor: AppColors.blackCat,
-            displayColor: AppColors.blackCat,
-          ),
-          appBarTheme: const AppBarTheme(
-            titleTextStyle: TextStyle(
-              color: AppColors.blackCat,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'Arial',
+            primaryTextTheme: ThemeData.light().primaryTextTheme.apply(
+              bodyColor: AppColors.blackCat,
+              displayColor: AppColors.blackCat,
             ),
-            iconTheme: IconThemeData(color: AppColors.blackCat),
-          ),
-          inputDecorationTheme: InputDecorationTheme(
-            hintStyle: const TextStyle(fontSize: 12),
-            labelStyle: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.82),
-            ),
-            floatingLabelStyle: const TextStyle(color: AppColors.blackCat),
-            helperStyle: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.72),
-            ),
-            prefixStyle: const TextStyle(color: AppColors.blackCat),
-            suffixStyle: const TextStyle(color: AppColors.blackCat),
-            counterStyle: TextStyle(
-              color: AppColors.blackCat.withValues(alpha: 0.72),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.28),
-                width: 1,
-              ),
-            ),
-            focusedBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.28),
-                width: 1,
-              ),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(
-                color: AppColors.blackCat.withValues(alpha: 0.20),
-                width: 1,
-              ),
-            ),
-            errorBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: AppColors.blackCat, width: 1),
-            ),
-            focusedErrorBorder: const OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
-            ),
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              textStyle: const TextStyle(
+            appBarTheme: const AppBarTheme(
+              titleTextStyle: TextStyle(
+                color: AppColors.blackCat,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
                 fontFamily: 'Arial',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
               ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              minimumSize: const Size(48, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              tapTargetSize: MaterialTapTargetSize.padded,
+              iconTheme: IconThemeData(color: AppColors.blackCat),
             ),
-          ),
-          outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              textStyle: const TextStyle(
-                fontFamily: 'Arial',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            inputDecorationTheme: InputDecorationTheme(
+              hintStyle: const TextStyle(fontSize: 12),
+              labelStyle: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.82),
               ),
-              shape: const RoundedRectangleBorder(
+              floatingLabelStyle: const TextStyle(color: AppColors.blackCat),
+              helperStyle: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.72),
+              ),
+              prefixStyle: const TextStyle(color: AppColors.blackCat),
+              suffixStyle: const TextStyle(color: AppColors.blackCat),
+              counterStyle: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.72),
+              ),
+              enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.28),
+                  width: 1,
+                ),
               ),
-              side: const BorderSide(color: AppColors.blackCat),
-              minimumSize: const Size(48, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              tapTargetSize: MaterialTapTargetSize.padded,
-            ),
-          ),
-          textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              textStyle: const TextStyle(
-                fontFamily: 'Arial',
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              shape: const RoundedRectangleBorder(
+              focusedBorder: const OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
               ),
-              minimumSize: const Size(48, 48),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              tapTargetSize: MaterialTapTargetSize.padded,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.28),
+                  width: 1,
+                ),
+              ),
+              disabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(
+                  color: AppColors.blackCat.withValues(alpha: 0.20),
+                  width: 1,
+                ),
+              ),
+              errorBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat, width: 1),
+              ),
+              focusedErrorBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: BorderSide(color: AppColors.blackCat, width: 1.2),
+              ),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                textStyle: const TextStyle(
+                  fontFamily: 'Arial',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                textStyle: const TextStyle(
+                  fontFamily: 'Arial',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                side: const BorderSide(color: AppColors.blackCat),
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.blackCat,
+                foregroundColor: AppColors.snow,
+                textStyle: const TextStyle(
+                  fontFamily: 'Arial',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                tapTargetSize: MaterialTapTargetSize.padded,
+              ),
             ),
           ),
-        ),
 
-        builder: (context, child) {
-          final scale = fontScale(context);
-          final baseTheme = Theme.of(context);
-          final mediaQuery = MediaQuery.of(context);
-          final safeInsets = mediaQuery.viewPadding;
+          builder: (context, child) {
+            final scale = fontScale(context);
+            final baseTheme = Theme.of(context);
+            final mediaQuery = MediaQuery.of(context);
+            final safeInsets = mediaQuery.viewPadding;
+            final isTablet = isTabletSize(mediaQuery.size);
 
-          return ColoredBox(
-            color: const Color(0xFF292222),
-            child: Theme(
+            // Theme scaling does not affect Text widgets that declare their own
+            // fontSize, which most JNT pages do. On tablets/iPads, compose the
+            // responsive factor with the platform text scaler so every label,
+            // field, button and heading receives the same controlled increase
+            // while the user's Android/iOS accessibility preference is kept.
+            // Phones retain the existing theme-only scaling behavior exactly.
+            final effectiveTextScaler = isTablet
+                ? TextScaler.linear(mediaQuery.textScaler.scale(1.0) * scale)
+                : mediaQuery.textScaler;
+
+            final themedChild = Theme(
               data: baseTheme.copyWith(
                 scaffoldBackgroundColor: const Color(0xFF292222),
                 canvasColor: const Color(0xFF292222),
-                textTheme: baseTheme.textTheme.apply(fontSizeFactor: scale),
+                textTheme: baseTheme.textTheme.apply(
+                  fontSizeFactor: isTablet ? 1.0 : scale,
+                ),
               ),
               child: MediaQuery(
                 data: mediaQuery.copyWith(
+                  textScaler: effectiveTextScaler,
                   padding: EdgeInsets.only(
                     top: safeInsets.top,
                     bottom: safeInsets.bottom,
@@ -588,22 +697,34 @@ class JntApp extends StatelessWidget {
                   child: child!,
                 ),
               ),
-            ),
-          );
-        },
+            );
 
-        home: const _SessionHomeGate(),
+            // Always pass the device's real logical width to the current page.
+            // The previous tablet-only ConstrainedBox(maxWidth: 520) made every
+            // route render as a centered phone screen on Android tablets and
+            // iPads. Removing that parent constraint does not affect phones;
+            // their available width is already unchanged. Individual pages can
+            // now respond to the actual tablet/iPad viewport with LayoutBuilder
+            // or MediaQuery while preserving their existing UI and behavior.
+            return ColoredBox(
+              color: const Color(0xFF292222),
+              child: themedChild,
+            );
+          },
 
-        routes: {
-          '/login': (_) => const LoginDialog(),
-          '/register': (_) => const RegisterPage(),
-          '/client-register': (_) => const ClientRegistrationPage(),
-          '/client-shell': (_) =>
-              ClientShellPage(profile: ClientProfileDraft.mock()),
-          '/artist-login': (_) => const ArtistLoginPage(),
-          '/artist-register-v2': (_) => const ArtistRegistrationFlow(),
-          '/reset-password-success': (_) => const ResetPasswordSuccessPage(),
-        },
+          home: const _SessionHomeGate(),
+
+          routes: {
+            '/login': (_) => const LoginDialog(),
+            '/register': (_) => const RegisterPage(),
+            '/client-register': (_) => const ClientRegistrationPage(),
+            '/client-shell': (_) =>
+                ClientShellPage(profile: ClientProfileDraft.mock()),
+            '/artist-login': (_) => const ArtistLoginPage(),
+            '/artist-register-v2': (_) => const ArtistRegistrationFlow(),
+            '/reset-password-success': (_) => const ResetPasswordSuccessPage(),
+          },
+        ),
       ),
     );
   }
@@ -761,6 +882,140 @@ class _DeepLinkBootstrapState extends State<_DeepLinkBootstrap> {
     }
 
     return uri;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
+  }
+}
+
+/// Detects an admin deactivating the signed-in user's account *while the app
+/// is already open* (the login-time and session-restore checks in
+/// login_page.dart only catch a deactivation that happened before this
+/// launch/sign-in). Subscribes to postgres_changes on whichever role table
+/// the signed-in user's row lives in and, the moment that row flips to
+/// blocked, force-signs-out and shows the same deactivated-account page used
+/// elsewhere.
+class _AccountStatusWatchdog extends StatefulWidget {
+  const _AccountStatusWatchdog({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AccountStatusWatchdog> createState() => _AccountStatusWatchdogState();
+}
+
+class _AccountStatusWatchdogState extends State<_AccountStatusWatchdog> {
+  static const _watchedTables = <String>[
+    'client',
+    'artist',
+    'client_artist',
+    'company',
+  ];
+
+  StreamSubscription<AuthState>? _authSub;
+  final List<RealtimeChannel> _channels = [];
+  String? _watchedUid;
+  bool _handlingDeactivation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = Supabase.instance.client.auth;
+    final currentUid = auth.currentUser?.id;
+    if (currentUid != null && currentUid.isNotEmpty) {
+      _subscribeFor(currentUid);
+    }
+    _authSub = auth.onAuthStateChange.listen((state) {
+      final uid = state.session?.user.id;
+      debugPrint('[WATCHDOG] authStateChange event=${state.event} uid=$uid');
+      switch (state.event) {
+        case AuthChangeEvent.initialSession:
+        case AuthChangeEvent.signedIn:
+        case AuthChangeEvent.tokenRefreshed:
+          if (uid != null && uid.isNotEmpty && uid != _watchedUid) {
+            _subscribeFor(uid);
+          }
+          break;
+        case AuthChangeEvent.signedOut:
+          _unsubscribeAll();
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  void _subscribeFor(String uid) {
+    _unsubscribeAll();
+    _watchedUid = uid;
+    _handlingDeactivation = false;
+    debugPrint('[WATCHDOG] subscribing for uid=$uid on $_watchedTables');
+    final supabase = Supabase.instance.client;
+    for (final table in _watchedTables) {
+      final channel = supabase
+          .channel('account_status_watch_${table}_$uid')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: table,
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'id',
+              value: uid,
+            ),
+            callback: (payload) {
+              debugPrint(
+                '[WATCHDOG] postgres_changes fired on $table for uid=$uid: '
+                '${payload.newRecord}',
+              );
+              _onRowUpdated(payload.newRecord);
+            },
+          )
+          .subscribe((status, error) {
+            debugPrint(
+              '[WATCHDOG] channel($table) status=$status error=$error',
+            );
+          });
+      _channels.add(channel);
+    }
+  }
+
+  void _onRowUpdated(Map<String, dynamic> newRecord) {
+    if (_handlingDeactivation) return;
+    if (!isAccountBlocked(newRecord)) return;
+    debugPrint('[WATCHDOG] blocked row detected, forcing sign-out');
+    _handlingDeactivation = true;
+    unawaited(_forceSignOutForDeactivation());
+  }
+
+  Future<void> _forceSignOutForDeactivation() async {
+    _unsubscribeAll();
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+    final navigator = JntApp.navigatorKey.currentState;
+    if (navigator == null) return;
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const _AccountDeactivatedPage()),
+      (route) => false,
+    );
+  }
+
+  void _unsubscribeAll() {
+    for (final channel in _channels) {
+      channel.unsubscribe();
+    }
+    _channels.clear();
+    _watchedUid = null;
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    _unsubscribeAll();
+    super.dispose();
   }
 
   @override

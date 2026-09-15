@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utlis/responsive_layout.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -363,7 +364,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 : items.first;
 
             return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              padding: responsivePagePadding(
+                context,
+                phone: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+                maxContentWidth: 900,
+              ),
               children: [
                 _TopSummaryPill(unreadCount: unreadCount, inputFs: _inputFs),
                 const SizedBox(height: 12),

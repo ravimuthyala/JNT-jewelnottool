@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 
 enum ClientArtistPreferredContactMethod { email, push, sms }
 
@@ -227,6 +228,7 @@ class _ClientArtistCommunicationPreferencePopupState
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Semantics(
       scopesRoute: true,
@@ -244,7 +246,12 @@ class _ClientArtistCommunicationPreferencePopupState
           child: SizedBox(
             height: MediaQuery.of(context).size.height * 0.92,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                10,
+                isTablet ? 24 : 16,
+                18,
+              ),
               child: Column(
                 children: [
                   Container(

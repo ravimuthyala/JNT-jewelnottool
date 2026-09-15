@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/responsive_field_row.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -102,7 +103,15 @@ class Step2LocationState extends State<Step2Location> {
   }
 
   Future<void> _pickPortfolioImages() async {
-    final files = await _picker.pickMultiImage(imageQuality: 90);
+    // Deliberately NOT passing imageQuality here. image_picker's native
+    // multi-select compression path has a known bug (Android especially)
+    // where every selected image gets compressed to the SAME temp
+    // filename, so every returned XFile ends up pointing at the
+    // last-written file -- the user picks several distinct photos and
+    // gets copies of one. Compression/resizing already happens per-file
+    // below via img.decodeImage/copyResize/encodeJpg, so the native param
+    // was redundant with it and is what caused the duplication.
+    final files = await _picker.pickMultiImage();
     if (files.isEmpty) return;
 
     final added = <Uint8List>[];
@@ -198,31 +207,38 @@ class Step2LocationState extends State<Step2Location> {
                 ),
                 const SizedBox(height: kFieldGap),
                 if (_nailTechType == NailTechType.professional) ...[
-                  Semantics(
-                    isRequired: true,
-                    child: TextFormField(
-                    controller: _licenseCtrl,
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec('License # *', 'Enter license number'),
-                    validator: (v) =>
-                        (_nailTechType == NailTechType.professional &&
-                            (v == null || v.trim().isEmpty))
-                        ? 'License # is required'
-                        : null,
-                    ),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  RegTypeAheadField(
-                    label: 'Jurisdiction *',
-                    hint: 'Select state',
-                    options: kUsStates,
-                    selectedValue: _jurisdiction,
-                    onChanged: (v) => setState(() => _jurisdiction = v),
-                    validator: (v) =>
-                        (_nailTechType == NailTechType.professional &&
-                            (v == null || v.isEmpty))
-                        ? 'Jurisdiction is required'
-                        : null,
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
+                          controller: _licenseCtrl,
+                          style: const TextStyle(fontSize: kInputFs),
+                          decoration: regDec(
+                            'License # *',
+                            'Enter license number',
+                          ),
+                          validator: (v) =>
+                              (_nailTechType == NailTechType.professional &&
+                                  (v == null || v.trim().isEmpty))
+                              ? 'License # is required'
+                              : null,
+                        ),
+                      ),
+                      RegTypeAheadField(
+                        label: 'Jurisdiction *',
+                        hint: 'Select state',
+                        options: kUsStates,
+                        selectedValue: _jurisdiction,
+                        onChanged: (v) => setState(() => _jurisdiction = v),
+                        validator: (v) =>
+                            (_nailTechType == NailTechType.professional &&
+                                (v == null || v.isEmpty))
+                            ? 'Jurisdiction is required'
+                            : null,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: kFieldGap),
                   RegPopupDropdown<String>(
@@ -239,40 +255,45 @@ class Step2LocationState extends State<Step2Location> {
                         : null,
                   ),
                 ] else ...[
-                  Semantics(
-                    isRequired: true,
-                    child: TextFormField(
-                    controller: _schoolCtrl,
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec(
-                      'School / Training Program *',
-                      'Enter school or program name',
-                    ),
-                    validator: (v) =>
-                        (_nailTechType == NailTechType.student &&
-                            (v == null || v.trim().isEmpty))
-                        ? 'School/Program is required'
-                        : null,
-                    ),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  RegPopupDropdown<String>(
-                    label: 'How long have you been practicing? *',
-                    hint: 'Select duration',
-                    value: _practiceDuration,
-                    items: kPracticeDurations,
-                    itemLabel: (s) => s,
-                    onChanged: (v) => setState(() => _practiceDuration = v),
-                    validator: (v) =>
-                        (_nailTechType == NailTechType.student &&
-                            (v == null || v.isEmpty))
-                        ? 'Duration is required'
-                        : null,
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
+                          controller: _schoolCtrl,
+                          style: const TextStyle(fontSize: kInputFs),
+                          decoration: regDec(
+                            'School / Training Program *',
+                            'Enter school or program name',
+                          ),
+                          validator: (v) =>
+                              (_nailTechType == NailTechType.student &&
+                                  (v == null || v.trim().isEmpty))
+                              ? 'School/Program is required'
+                              : null,
+                        ),
+                      ),
+                      RegPopupDropdown<String>(
+                        label: 'How long have you been practicing? *',
+                        hint: 'Select duration',
+                        value: _practiceDuration,
+                        items: kPracticeDurations,
+                        itemLabel: (s) => s,
+                        onChanged: (v) =>
+                            setState(() => _practiceDuration = v),
+                        validator: (v) =>
+                            (_nailTechType == NailTechType.student &&
+                                (v == null || v.isEmpty))
+                            ? 'Duration is required'
+                            : null,
+                      ),
+                    ],
                   ),
                 ],
                 const SizedBox(height: kFieldGap),
                 Text(
-                  'Upload previous Art',
+                  'Upload Previous Portfolio Photos',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -383,19 +404,23 @@ class Step2LocationState extends State<Step2Location> {
                   style: const TextStyle(fontSize: kInputFs),
                 ),
                 const SizedBox(height: kFieldGap),
-                TextField(
-                  controller: _instagramCtrl,
-                  decoration: regDec(
-                    'Instagram (one required)',
-                    'Instagram handle',
-                  ),
-                  style: const TextStyle(fontSize: kInputFs),
-                ),
-                const SizedBox(height: kFieldGap),
-                TextField(
-                  controller: _tiktokCtrl,
-                  decoration: regDec('TikTok', 'TikTok handle'),
-                  style: const TextStyle(fontSize: kInputFs),
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    TextField(
+                      controller: _instagramCtrl,
+                      decoration: regDec(
+                        'Instagram (one required)',
+                        'Instagram handle',
+                      ),
+                      style: const TextStyle(fontSize: kInputFs),
+                    ),
+                    TextField(
+                      controller: _tiktokCtrl,
+                      decoration: regDec('TikTok', 'TikTok handle'),
+                      style: const TextStyle(fontSize: kInputFs),
+                    ),
+                  ],
                 ),
               ],
             ),

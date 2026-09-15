@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../services/artist_directory_service.dart';
 import '../services/address_validation_service.dart';
 import '../services/notifications_service.dart';
@@ -114,9 +115,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   final FocusNode _avatarMenuFocusNode = FocusNode(
     debugLabel: 'designAccountMenu',
   );
-  final FocusNode _addClientFocusNode = FocusNode(
-    debugLabel: 'addGroupClient',
-  );
+  final FocusNode _addClientFocusNode = FocusNode(debugLabel: 'addGroupClient');
   final FocusNode _needByFocusNode = FocusNode(debugLabel: 'needByDateField');
   final FocusNode _descriptionFocusNode = FocusNode(
     debugLabel: 'descriptionField',
@@ -2252,13 +2251,19 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
   }
 
   void _goHomeAfterSubmit() {
-    if (widget.onNavTap != null) {
-      widget.onNavTap!(0);
-      return;
-    }
+    // When this page was reached by pushing a new route (e.g. resubmitting
+    // a cancelled/expired order from the orders list) rather than as a
+    // persistent bottom-nav tab, popping back is what "go home" actually
+    // means -- calling onNavTap alone would switch the tab underneath this
+    // still-pushed route without ever leaving it, so the user stays stuck
+    // looking at this page. Prefer popping whenever there's somewhere to
+    // pop to; only fall back to the tab switch when this page has nothing
+    // to pop (i.e. it IS the tab).
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
     }
+    widget.onNavTap?.call(0);
   }
 
   void _resetFormAfterSubmit() {
@@ -2395,12 +2400,21 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
           ? null
           : asMap(apiNail['dimensions']),
     );
-    final resolvedDims = _pickBestDimensions(<NailDimensions?>[
-      dimsFromRequest,
-      apiDims,
-      _singleNailPrefs.dimensions,
-      widget.profile.nail.dimensions,
-    ]);
+    // _pickBestDimensions prefers whichever candidate has ALL ten fingers
+    // measured, which favors a complete profile default over a prior
+    // request that (as most do) only measured some fingers -- silently
+    // discarding that request's own measurements, including its JNT Tap
+    // checkbox selections, on resubmit. The request's own data should win
+    // outright whenever it has anything at all; profile/API defaults are
+    // only for brand-new requests that have no prior data to restore.
+    final resolvedDims =
+        dimsFromRequest != null && _hasAnyMeasurement(dimsFromRequest)
+        ? dimsFromRequest
+        : _pickBestDimensions(<NailDimensions?>[
+            apiDims,
+            _singleNailPrefs.dimensions,
+            widget.profile.nail.dimensions,
+          ]);
     _singleNailPrefs = NailPreferences(
       dimensions: resolvedDims,
       shape: _shape,
@@ -2626,7 +2640,6 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
     return 'JNT Reveal Date, date the artwork is published publicly, selected $trimmed';
   }
 
-
   Future<void> _submitRequest() async {
     if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
@@ -2763,7 +2776,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Please select an artist who accepts NFC for this request.',
+              'Please select an artist who accepts JNT Tap for this request.',
             ),
           ),
         );
@@ -3191,1101 +3204,1125 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       ),
     );
 
-    return Theme(
-      data: pageTheme,
-      child: Scaffold(
-        backgroundColor: AppColors.snow,
-        appBar: AppBar(
-          backgroundColor: AppColors.alabaster,
-          surfaceTintColor: AppColors.alabaster,
-          elevation: 0,
-          toolbarHeight: JntHeaderMetrics.toolbarHeight,
-          automaticallyImplyLeading: false,
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: 'Create custom request',
+      child: Theme(
+        data: pageTheme,
+        child: Scaffold(
+          backgroundColor: AppColors.snow,
+          appBar: AppBar(
+            backgroundColor: AppColors.alabaster,
+            surfaceTintColor: AppColors.alabaster,
+            elevation: 0,
+            toolbarHeight: JntHeaderMetrics.toolbarHeight,
+            automaticallyImplyLeading: false,
 
-          leadingWidth: widget.onBackHome != null && widget.showBackArrow
-              ? 108
-              : JntHeaderMetrics.leadingWidth,
-          leading: Row(
-            children: [
-              if (widget.onBackHome != null && widget.showBackArrow)
-                SizedBox(
-                  width: 50,
-                  child: IconButton(
-                    tooltip: 'Back',
-                    onPressed: widget.onBackHome,
-                    icon: Icon(
-                      Icons.arrow_back_rounded,
-                      size: 22,
-                      color: AppColors.blackCat.withValues(alpha: 0.75),
+            leadingWidth: widget.onBackHome != null && widget.showBackArrow
+                ? 108
+                : JntHeaderMetrics.leadingWidth,
+            leading: Row(
+              children: [
+                if (widget.onBackHome != null && widget.showBackArrow)
+                  SizedBox(
+                    width: 50,
+                    child: IconButton(
+                      tooltip: 'Back',
+                      onPressed: widget.onBackHome,
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        size: 22,
+                        color: AppColors.blackCat.withValues(alpha: 0.75),
+                      ),
                     ),
                   ),
+                NotificationBellButton(
+                  onTap: () {
+                    NotificationsPage.showAsModal(context);
+                  },
+                  focusNode: _notificationsFocusNode,
+                  iconSize: JntHeaderMetrics.notificationIconSize,
                 ),
-              NotificationBellButton(
-                onTap: () {
-                  NotificationsPage.showAsModal(context);
-                },
-                focusNode: _notificationsFocusNode,
-                iconSize: JntHeaderMetrics.notificationIconSize,
+              ],
+            ),
+
+            centerTitle: true,
+            title: ExcludeSemantics(
+              child: Image.asset(
+                'assets/images/jnt_logo_black.png',
+                height: JntHeaderMetrics.logoHeight,
+                fit: BoxFit.contain,
+                excludeFromSemantics: true,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(
+                  right: JntHeaderMetrics.rightPadding,
+                ),
+                child: _AvatarMenu(
+                  focusNode: _avatarMenuFocusNode,
+                  onCanceled: _restoreAvatarMenuFocus,
+                  onSelected: _onAvatarMenuSelected,
+                  avatarUrl: widget.profile.basic.profileImageUrl,
+                  displayName: widget.profile.basic.name,
+                  showProfile: widget.showProfileMenu,
+                  showHistory: widget.showExtendedAvatarMenu,
+                  showCalendar: widget.showExtendedAvatarMenu,
+                  showArtist: widget.showExtendedAvatarMenu,
+                  showReviews: widget.showExtendedAvatarMenu,
+                ),
               ),
             ],
           ),
-
-          centerTitle: true,
-          title: ExcludeSemantics(
-            child: Image.asset(
-              'assets/images/jnt_logo_black.png',
-              height: JntHeaderMetrics.logoHeight,
-              fit: BoxFit.contain,
-              excludeFromSemantics: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          body: ListView(
+            padding: responsivePagePadding(
+              context,
+              phone: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+              maxContentWidth: 900,
             ),
-          ),
-
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(
-                right: JntHeaderMetrics.rightPadding,
+            children: [
+              const SizedBox(height: 6),
+              Semantics(
+                header: true,
+                sortKey: OrdinalSortKey(3),
+                child: Center(
+                  child: Text(
+                    'Request Custom Design',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: 'times-new-roman',
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
               ),
-              child: _AvatarMenu(
-                focusNode: _avatarMenuFocusNode,
-                onCanceled: _restoreAvatarMenuFocus,
-                onSelected: _onAvatarMenuSelected,
-                avatarUrl: widget.profile.basic.profileImageUrl,
-                displayName: widget.profile.basic.name,
-                showProfile: widget.showProfileMenu,
-                showHistory: widget.showExtendedAvatarMenu,
-                showCalendar: widget.showExtendedAvatarMenu,
-                showArtist: widget.showExtendedAvatarMenu,
-                showReviews: widget.showExtendedAvatarMenu,
-              ),
-            ),
-          ],
-        ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-          children: [
-            const SizedBox(height: 6),
-            Semantics(
-              header: true,
-              sortKey: OrdinalSortKey(3),
-              child: Center(
+              const SizedBox(height: 6),
+              Center(
                 child: Text(
-                  'Request Custom Design',
+                  "Tell artists exactly what you're looking for and get custom proposals.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.70),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    fontFamily: 'Arial',
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              Semantics(
+                header: true,
+                sortKey: const OrdinalSortKey(10),
+                child: Text(
+                  'Request Details',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    fontFamily: 'times-new-roman',
+                    fontFamily: 'Arialbold',
                     color: AppColors.blackCat,
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Center(
-              child: Text(
-                "Tell artists exactly what you're looking for and get custom proposals.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.blackCat.withValues(alpha: 0.70),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  fontFamily: 'Arial',
+              const SizedBox(height: 10),
+              Semantics(
+                container: true,
+                explicitChildNodes: true,
+                child: _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _fieldLabel('Need By Date *'),
+                      const SizedBox(height: 8),
+                      Semantics(
+                        sortKey: const OrdinalSortKey(11),
+                        button: true,
+                        label: _needBySemanticLabel(),
+                        onTap: _pickDate,
+                        child: ExcludeSemantics(
+                          child: _FocusRingWrapper(
+                            focusNode: _needByFocusNode,
+                            ringColor: _focusRing,
+                            child: _DateField(
+                              controller: _dateCtrl,
+                              focusNode: _needByFocusNode,
+                              onTap: _pickDate,
+                              errorText: _fieldErrors['needBy'],
+                              onChanged: (_) => setState(() {
+                                _fieldErrors.remove('needBy');
+                              }),
+                            ),
+                          ),
+                        ),
+                      ),
+                      ExcludeSemantics(
+                        child: _InlineError(text: _fieldErrors['needBy']),
+                      ),
+
+                      const SizedBox(height: 14),
+                      _fieldLabel(
+                        'JNT Reveal Date (Date the artwork is published publicly)',
+                      ),
+                      const SizedBox(height: 8),
+                      Semantics(
+                        sortKey: const OrdinalSortKey(12),
+                        button: true,
+                        label: _revealDateSemanticLabel(),
+                        hint: 'Double tap to select JNT Reveal Date',
+                        onTap: _pickRevealDate,
+                        child: ExcludeSemantics(
+                          child: _DateField(
+                            controller: _revealDateCtrl,
+                            onTap: _pickRevealDate,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 14),
+                      _fieldLabel('Description *'),
+                      const SizedBox(height: 8),
+                      Semantics(
+                        sortKey: const OrdinalSortKey(13),
+                        isRequired: true,
+                        child: _FocusRingWrapper(
+                          focusNode: _descriptionFocusNode,
+                          ringColor: _focusRing,
+                          child: _TextArea(
+                            controller: _descCtrl,
+                            focusNode: _descriptionFocusNode,
+                            hint: 'Describe your ideal design in detail...',
+                            errorText: _fieldErrors['description'],
+                            onChanged: (_) => setState(() {
+                              _fieldErrors.remove('description');
+                            }),
+                          ),
+                        ),
+                      ),
+                      ExcludeSemantics(
+                        child: _InlineError(text: _fieldErrors['description']),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            const SizedBox(height: 18),
+              const SizedBox(height: 18),
 
-            Semantics(
-              header: true,
-              sortKey: const OrdinalSortKey(10),
-              child: Text(
-                'Request Details',
+              const Text(
+                'Inspiration Photos',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   fontFamily: 'Arialbold',
-                  color: AppColors.blackCat,
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            Semantics(
-              container: true,
-              explicitChildNodes: true,
-              child: _Card(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _fieldLabel('Need By Date *'),
-                  const SizedBox(height: 8),
-                  Semantics(
-                    sortKey: const OrdinalSortKey(11),
-                    button: true,
-                    label: _needBySemanticLabel(),
-                    onTap: _pickDate,
-                    child: ExcludeSemantics(
-                      child: _FocusRingWrapper(
-                        focusNode: _needByFocusNode,
-                        ringColor: _focusRing,
-                        child: _DateField(
-                          controller: _dateCtrl,
-                          focusNode: _needByFocusNode,
-                          onTap: _pickDate,
-                          errorText: _fieldErrors['needBy'],
-                          onChanged: (_) => setState(() {
-                            _fieldErrors.remove('needBy');
-                          }),
-                        ),
-                      ),
-                    ),
-                  ),
-                  ExcludeSemantics(
-                    child: _InlineError(text: _fieldErrors['needBy']),
-                  ),
-
-                  const SizedBox(height: 14),
-                  _fieldLabel(
-                    'JNT Reveal Date (Date the artwork is published publicly)',
-                  ),
-                  const SizedBox(height: 8),
-                    Semantics(
-                      sortKey: const OrdinalSortKey(12),
-                      button: true,
-                      label: _revealDateSemanticLabel(),
-                      hint: 'Double tap to select JNT Reveal Date',
-                      onTap: _pickRevealDate,
-                      child: ExcludeSemantics(
-                        child: _DateField(
-                          controller: _revealDateCtrl,
-                          onTap: _pickRevealDate,
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 14),
-                  _fieldLabel('Description *'),
-                  const SizedBox(height: 8),
-                    Semantics(
-                      sortKey: const OrdinalSortKey(13),
-                      isRequired: true,
-                    child: _FocusRingWrapper(
-                      focusNode: _descriptionFocusNode,
-                      ringColor: _focusRing,
-                      child: _TextArea(
-                        controller: _descCtrl,
-                        focusNode: _descriptionFocusNode,
-                        hint: 'Describe your ideal design in detail...',
-                        errorText: _fieldErrors['description'],
-                        onChanged: (_) => setState(() {
-                          _fieldErrors.remove('description');
-                        }),
-                      ),
-                    ),
-                  ),
-                  ExcludeSemantics(
-                    child: _InlineError(text: _fieldErrors['description']),
-                  ),
-                  ],
+              const SizedBox(height: 6),
+              Text(
+                'Upload photos that inspire your vision.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontFamily: 'Arial',
                 ),
               ),
-            ),
-
-            const SizedBox(height: 18),
-
-            const Text(
-              'Inspiration Photos',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Upload photos that inspire your vision.',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                fontFamily: 'Arial',
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _SoftButton(
-                    icon: Icons.photo_library_outlined,
-                    label: 'Gallery',
-                    backgroundColor: AppColors.blackCatLight,
-                    iconColor: AppColors.snow,
-                    textColor: AppColors.snow,
-                    onTap: _pickFromGallery,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SoftButton(
-                    icon: Icons.photo_camera_outlined,
-                    label: 'Camera',
-                    backgroundColor: AppColors.blackCat,
-                    iconColor: AppColors.snow,
-                    textColor: AppColors.snow,
-                    onTap: _pickFromCamera,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo.',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-                fontWeight: FontWeight.w600,
-                fontSize: 11.5,
-                fontFamily: 'Arial',
-              ),
-            ),
-            _InlineError(text: _fieldErrors['inspirationPhotos']),
-
-            if (_inspirationPhotos.isNotEmpty) ...[
               const SizedBox(height: 10),
-              _Card(
-                child: SizedBox(
-                  height: 110,
-                  child: Builder(
-                    builder: (context) {
-                      final photos = List<String>.from(_inspirationPhotos);
-                      return SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            for (var i = 0; i < photos.length; i++) ...[
-                              if (i > 0) const SizedBox(width: 10),
-                              Container(
-                                width: 110,
-                                height: 110,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: AppColors.blackCat.withValues(
-                                      alpha: 0.25,
+              Row(
+                children: [
+                  Expanded(
+                    child: _SoftButton(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Gallery',
+                      backgroundColor: AppColors.blackCatLight,
+                      iconColor: AppColors.snow,
+                      textColor: AppColors.snow,
+                      onTap: _pickFromGallery,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SoftButton(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Camera',
+                      backgroundColor: AppColors.blackCat,
+                      iconColor: AppColors.snow,
+                      textColor: AppColors.snow,
+                      onTap: _pickFromCamera,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Allowed files: JPG, JPEG, PNG. Recommended size: up to 2 MB per photo.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11.5,
+                  fontFamily: 'Arial',
+                ),
+              ),
+              _InlineError(text: _fieldErrors['inspirationPhotos']),
+
+              if (_inspirationPhotos.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _Card(
+                  child: SizedBox(
+                    height: 110,
+                    child: Builder(
+                      builder: (context) {
+                        final photos = List<String>.from(_inspirationPhotos);
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (var i = 0; i < photos.length; i++) ...[
+                                if (i > 0) const SizedBox(width: 10),
+                                Container(
+                                  width: 110,
+                                  height: 110,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.25,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                clipBehavior: Clip.hardEdge,
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    _previewImage(photos[i]),
-                                    Positioned(
-                                      top: 4,
-                                      right: 4,
-                                      child: Semantics(
-                                        button: true,
-                                        label:
-                                            'Remove inspiration photo ${i + 1} of ${photos.length}',
-                                        onTap: () => _removeInspirationPhoto(
-                                          photos[i],
-                                        ),
-                                        child: ExcludeSemantics(
-                                          child: GestureDetector(
-                                            onTap: () =>
-                                                _removeInspirationPhoto(
-                                                  photos[i],
+                                  clipBehavior: Clip.hardEdge,
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      _previewImage(photos[i]),
+                                      Positioned(
+                                        top: 4,
+                                        right: 4,
+                                        child: Semantics(
+                                          button: true,
+                                          label:
+                                              'Remove inspiration photo ${i + 1} of ${photos.length}',
+                                          onTap: () => _removeInspirationPhoto(
+                                            photos[i],
+                                          ),
+                                          child: ExcludeSemantics(
+                                            child: GestureDetector(
+                                              onTap: () =>
+                                                  _removeInspirationPhoto(
+                                                    photos[i],
+                                                  ),
+                                              child: Container(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minHeight: 48,
+                                                      minWidth: 48,
+                                                    ),
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.black54,
+                                                  shape: BoxShape.circle,
                                                 ),
-                                            child: Container(
-                                              constraints: const BoxConstraints(
-                                                minHeight: 48,
-                                                minWidth: 48,
-                                              ),
-                                              decoration: const BoxDecoration(
-                                                color: Colors.black54,
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                Icons.close,
-                                                size: 14,
-                                                color: Colors.white,
+                                                child: const Icon(
+                                                  Icons.close,
+                                                  size: 14,
+                                                  color: Colors.white,
+                                                ),
                                               ),
                                             ),
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 12),
-
-            MergeSemantics(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Transform.scale(
-                    scale: 0.95,
-                    child: Checkbox(
-                      value: _allowNonLicensed,
-                      onChanged: (v) => setState(() {
-                        _allowNonLicensed = (v ?? true);
-                        _syncSelectedArtistForFilters();
-                      }),
-                      activeColor: AppColors.blackCat,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 10),
-                      child: Text(
-                        'Are you willing to allow non-licensed nail technicians to work on your design?',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.blackCat,
-                          height: 1.2,
-                          fontSize: 14,
-                          fontFamily: 'Arial',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            const Text(
-              'Type of Order',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _RadioPill(
-                    selected: _orderType == OrderType.single,
-                    label: 'Single Order',
-                    onTap: () => setState(() => _orderType = OrderType.single),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _RadioPill(
-                    selected: _orderType == OrderType.group,
-                    label: 'Group Order',
-                    onTap: () {
-                      setState(() => _orderType = OrderType.group);
-                      if (_completedClients.isEmpty &&
-                          !_loadingCompletedClients) {
-                        unawaited(_loadCompletedClientsFromDb());
-                      }
-                    },
                   ),
                 ),
               ],
-            ),
 
-            if (_orderType == OrderType.group) ...[
+              const SizedBox(height: 12),
+
+              MergeSemantics(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Transform.scale(
+                      scale: 0.95,
+                      child: Checkbox(
+                        value: _allowNonLicensed,
+                        onChanged: (v) => setState(() {
+                          _allowNonLicensed = (v ?? true);
+                          _syncSelectedArtistForFilters();
+                        }),
+                        activeColor: AppColors.blackCat,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Text(
+                          'Are you willing to allow non-licensed nail technicians to work on your design?',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.blackCat,
+                            height: 1.2,
+                            fontSize: 14,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 18),
+
+              const Text(
+                'Type of Order',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'Group Clients (up to 15)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: 'Arialbold',
-                      ),
+                  Expanded(
+                    child: _RadioPill(
+                      selected: _orderType == OrderType.single,
+                      label: 'Single Order',
+                      onTap: () =>
+                          setState(() => _orderType = OrderType.single),
                     ),
                   ),
-                  TextButton(
-                    focusNode: _addClientFocusNode,
-                    style: TextButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: AppColors.blackCat,
-                    ),
-                    onPressed:
-                        _loadingCompletedClients ||
-                            _completedClients.isEmpty ||
-                            _groupSelections.length >= _maxGroupClients
-                        ? null
-                        : _addClientSlot,
-                    child: const Text(
-                      'Add Client +',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.blackCat,
-                        fontSize: 14,
-                        fontFamily: 'Arialbold',
-                      ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _RadioPill(
+                      selected: _orderType == OrderType.group,
+                      label: 'Group Order',
+                      onTap: () {
+                        setState(() => _orderType = OrderType.group);
+                        if (_completedClients.isEmpty &&
+                            !_loadingCompletedClients) {
+                          unawaited(_loadCompletedClientsFromDb());
+                        }
+                      },
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
 
-              if (_loadingCompletedClients)
-                _Card(
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Loading clients from database...',
+              if (_orderType == OrderType.group) ...[
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Group Clients (up to 15)',
                         style: TextStyle(
-                          color: AppColors.blackCat.withValues(alpha: 0.65),
-                          fontWeight: FontWeight.w400,
-                          fontSize: 12,
-                          fontFamily: 'Arial',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Arialbold',
                         ),
                       ),
-                    ],
-                  ),
-                )
-              else if (_completedClients.isEmpty)
-                _Card(
-                  child: Text(
-                    'No completed client profiles found in database.',
+                    ),
+                    TextButton(
+                      focusNode: _addClientFocusNode,
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: AppColors.blackCat,
+                      ),
+                      onPressed:
+                          _loadingCompletedClients ||
+                              _completedClients.isEmpty ||
+                              _groupSelections.length >= _maxGroupClients
+                          ? null
+                          : _addClientSlot,
+                      child: const Text(
+                        'Add Client +',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.blackCat,
+                          fontSize: 14,
+                          fontFamily: 'Arialbold',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                if (_loadingCompletedClients)
+                  _Card(
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Loading clients from database...',
+                          style: TextStyle(
+                            color: AppColors.blackCat.withValues(alpha: 0.65),
+                            fontWeight: FontWeight.w400,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (_completedClients.isEmpty)
+                  _Card(
+                    child: Text(
+                      'No completed client profiles found in database.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.65),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12,
+                        fontFamily: 'Arial',
+                      ),
+                    ),
+                  )
+                else if (_groupSelections.isEmpty)
+                  Text(
+                    'Add clients to the group order. Only clients with completed profiles appear here.',
                     style: TextStyle(
                       color: AppColors.blackCat.withValues(alpha: 0.65),
-                      fontWeight: FontWeight.w400,
-                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
                       fontFamily: 'Arial',
                     ),
                   ),
-                )
-              else if (_groupSelections.isEmpty)
-                Text(
-                  'Add clients to the group order. Only clients with completed profiles appear here.',
-                  style: TextStyle(
-                    color: AppColors.blackCat.withValues(alpha: 0.65),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                    fontFamily: 'Arial',
-                  ),
-                ),
 
-              ...List.generate(_groupSelections.length, (i) {
-                final slot = _groupSelections[i];
-                final selectedClient = _findClient(slot.clientId);
-                final draft = slot.draftNails;
-                final saved = slot.savedNails != null;
+                ...List.generate(_groupSelections.length, (i) {
+                  final slot = _groupSelections[i];
+                  final selectedClient = _findClient(slot.clientId);
+                  final draft = slot.draftNails;
+                  final saved = slot.savedNails != null;
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _Card(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _Card(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Client ${i + 1}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  fontFamily: 'Arialbold',
+                                ),
+                              ),
+                              const Spacer(),
+                              Semantics(
+                                sortKey: const OrdinalSortKey(2),
+                                onDidLoseAccessibilityFocus: () {
+                                  if (_groupSelections.length >=
+                                      _maxGroupClients) {
+                                    return;
+                                  }
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted) {
+                                      _addClientFocusNode.requestFocus();
+                                    }
+                                  });
+                                },
+                                child: IconButton(
+                                  focusNode: slot.deleteFocusNode,
+                                  tooltip: 'Remove client ${i + 1}',
+                                  onPressed: () => _removeClientSlot(i),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 22,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          Semantics(
+                            sortKey: const OrdinalSortKey(1),
+                            child: _AccessibleClientDropdown(
+                              key: slot.dropdownKey,
+                              controller: slot.searchController,
+                              selectedClientId: slot.clientId,
+                              clients: _searchCompletedClients(''),
+                              label: 'Select client',
+                              onSelected: (clientId) {
+                                unawaited(_onSelectClientForSlot(i, clientId));
+                              },
+                            ),
+                          ),
+
+                          if (selectedClient == null || draft == null) ...[
+                            const SizedBox(height: 10),
                             Text(
-                              'Client ${i + 1}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                                fontFamily: 'Arialbold',
+                              'Select a client to view nail dimensions and edit preferences.',
+                              style: TextStyle(
+                                color: AppColors.blackCat.withValues(
+                                  alpha: 0.60,
+                                ),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                fontFamily: 'Arial',
                               ),
                             ),
-                            const Spacer(),
-                            Semantics(
-                              sortKey: const OrdinalSortKey(2),
-                              onDidLoseAccessibilityFocus: () {
-                                if (_groupSelections.length >=
-                                    _maxGroupClients) {
-                                  return;
-                                }
-                                WidgetsBinding.instance.addPostFrameCallback((_) {
-                                  if (mounted) {
-                                    _addClientFocusNode.requestFocus();
-                                  }
+                          ],
+
+                          if (selectedClient != null && draft != null) ...[
+                            const SizedBox(height: 14),
+                            NailPreferencesInlineEditor(
+                              initial: draft,
+                              showMeasurementTips: false,
+                              showDimensionImages: false,
+                              showNfcOptions: true,
+                              nailDimensionBorderColor: AppColors.blackCat
+                                  .withValues(alpha: 0.25),
+                              onChanged: (updated) {
+                                setState(() {
+                                  slot.draftNails = updated;
+                                  slot.savedNails = null;
+                                  _applyNfcBudgetDelta();
+                                  _syncSelectedArtistForFilters();
                                 });
                               },
-                              child: IconButton(
-                                focusNode: slot.deleteFocusNode,
-                                tooltip: 'Remove client ${i + 1}',
-                                onPressed: () => _removeClientSlot(i),
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  size: 22,
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            SizedBox(
+                              height: 46,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: saved
+                                      ? AppColors.balletSlippers
+                                      : AppColors.blackCat,
+                                  foregroundColor: saved
+                                      ? AppColors.blackCat
+                                      : _requestSnow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                                onPressed: () => _saveSlot(i),
+                                child: Text(
+                                  saved ? 'Saved' : 'Save',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
                             ),
                           ],
-                        ),
-                        const SizedBox(height: 10),
-
-                        Semantics(
-                          sortKey: const OrdinalSortKey(1),
-                          child: _AccessibleClientDropdown(
-                            key: slot.dropdownKey,
-                            controller: slot.searchController,
-                            selectedClientId: slot.clientId,
-                            clients: _searchCompletedClients(''),
-                            label: 'Select client',
-                            onSelected: (clientId) {
-                              unawaited(_onSelectClientForSlot(i, clientId));
-                            },
-                          ),
-                        ),
-
-                        if (selectedClient == null || draft == null) ...[
-                          const SizedBox(height: 10),
-                          Text(
-                            'Select a client to view nail dimensions and edit preferences.',
-                            style: TextStyle(
-                              color: AppColors.blackCat.withValues(alpha: 0.60),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                              fontFamily: 'Arial',
-                            ),
-                          ),
                         ],
-
-                        if (selectedClient != null && draft != null) ...[
-                          const SizedBox(height: 14),
-                          NailPreferencesInlineEditor(
-                            initial: draft,
-                            showMeasurementTips: false,
-                            showDimensionImages: false,
-                            showNfcOptions: true,
-                            nailDimensionBorderColor: AppColors.blackCat
-                                .withValues(alpha: 0.25),
-                            onChanged: (updated) {
-                              setState(() {
-                                slot.draftNails = updated;
-                                slot.savedNails = null;
-                                _applyNfcBudgetDelta();
-                                _syncSelectedArtistForFilters();
-                              });
-                            },
-                          ),
-
-                          const SizedBox(height: 14),
-
-                          SizedBox(
-                            height: 46,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: saved
-                                    ? AppColors.balletSlippers
-                                    : AppColors.blackCat,
-                                foregroundColor: saved
-                                    ? AppColors.blackCat
-                                    : _requestSnow,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                              ),
-                              onPressed: () => _saveSlot(i),
-                              child: Text(
-                                saved ? 'Saved' : 'Save',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ],
-
-            const SizedBox(height: 18),
-
-            const Text(
-              'Request a Specific Artist',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _fieldLabel('Artist'),
-                  const SizedBox(height: 8),
-
-                  Builder(
-                    builder: (context) {
-                      final selected = (_selectedArtist ?? '').trim();
-                      final options = _dedupeArtistNames(<String>[
-                        ..._filteredArtistOptions(),
-                      ]);
-                      return _AccessibleSearchableSelectField(
-                        value: selected,
-                        hint: 'Select Artist',
-                        semanticLabel: 'Artist',
-                        items: options,
-                        onChanged: (v) => setState(
-                          () => _selectedArtist = v.trim().isEmpty
-                              ? null
-                              : v.trim(),
-                        ),
-                      );
-                    },
-                  ),
-
-                  if ((_selectedArtist ?? '').trim().isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.blackCat.withValues(alpha: 0.75),
-                        height: 1.2,
-                        fontSize: 13,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        ChoiceChip(
-                          label: const Text('Yes'),
-                          selected: _fallbackToPool == true,
-                          selectedColor: AppColors.blackCat,
-                          backgroundColor: _requestSnow,
-                          checkmarkColor: AppColors.snow,
-                          onSelected: (_) =>
-                              setState(() => _fallbackToPool = true),
-                          labelStyle: TextStyle(
-                            fontWeight: FontWeight.w400,
-                            fontSize: 12,
-                            color: _fallbackToPool == true
-                                ? AppColors.snow
-                                : AppColors.blackCat,
-                          ),
-                          side: BorderSide(
-                            color: AppColors.blackCat.withValues(alpha: 0.08),
-                          ),
-                          visualDensity: const VisualDensity(
-                            horizontal: -2,
-                            vertical: -2,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        ChoiceChip(
-                          label: const Text('No'),
-                          selected: _fallbackToPool == false,
-                          selectedColor: AppColors.blackCat,
-                          backgroundColor: _requestSnow,
-                          checkmarkColor: AppColors.snow,
-                          onSelected: (_) =>
-                              setState(() => _fallbackToPool = false),
-                          labelStyle: TextStyle(
-                            fontWeight: FontWeight.w400,
-                            fontSize: 12,
-                            color: _fallbackToPool == false
-                                ? AppColors.snow
-                                : AppColors.blackCat,
-                          ),
-                          side: BorderSide(
-                            color: AppColors.blackCat.withValues(alpha: 0.08),
-                          ),
-                          visualDensity: const VisualDensity(
-                            horizontal: -2,
-                            vertical: -2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+                  );
+                }),
+              ],
+
+              const SizedBox(height: 18),
+
+              NailPreferencesInlineEditor(
+                initial: _singleNailPrefs,
+                showMeasurementTips: false,
+                showDimensionImages: false,
+                showNfcOptions: true,
+                nailDimensionBorderColor: AppColors.blackCat.withValues(
+                  alpha: 0.25,
+                ),
+                onChanged: (updated) {
+                  setState(() {
+                    _singleNailPrefs = updated;
+                    _shape = updated.shape;
+                    _length = updated.length;
+                    _applyNfcBudgetDelta();
+                    _syncSelectedArtistForFilters();
+                    _fieldErrors.remove('shape');
+                    _fieldErrors.remove('length');
+                  });
+                },
               ),
-            ),
+              _InlineError(text: _fieldErrors['shape']),
+              _InlineError(text: _fieldErrors['length']),
 
-            const SizedBox(height: 18),
+              const SizedBox(height: 18),
 
-            NailPreferencesInlineEditor(
-              initial: _singleNailPrefs,
-              showMeasurementTips: false,
-              showDimensionImages: false,
-              showNfcOptions: true,
-              nailDimensionBorderColor: AppColors.blackCat.withValues(
-                alpha: 0.25,
+              const Text(
+                'Request a Specific Artist',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arialbold',
+                ),
               ),
-              onChanged: (updated) {
-                setState(() {
-                  _singleNailPrefs = updated;
-                  _shape = updated.shape;
-                  _length = updated.length;
-                  _applyNfcBudgetDelta();
-                  _syncSelectedArtistForFilters();
-                  _fieldErrors.remove('shape');
-                  _fieldErrors.remove('length');
-                });
-              },
-            ),
-            _InlineError(text: _fieldErrors['shape']),
-            _InlineError(text: _fieldErrors['length']),
+              const SizedBox(height: 10),
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _fieldLabel('Artist'),
+                    const SizedBox(height: 8),
 
-            const Text(
-              'Budget Range',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arial',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Set your preferred budget range for nail designs.',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-            const SizedBox(height: 10),
-            _BudgetCard(
-              values: _sanitizeBudgetRange(_budget),
-              onChanged: (v) =>
-                  setState(() => _budget = _sanitizeBudgetRange(v)),
-              onChangeEnd: (v) => _saveBudgetToDb(_sanitizeBudgetRange(v)),
-            ),
-
-            const SizedBox(height: 18),
-
-            const Text(
-              'Shipping Information',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                fontFamily: 'Arial',
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Tell us where your finished order should be sent.',
-              style: TextStyle(
-                color: AppColors.blackCat.withValues(alpha: 0.70),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                fontFamily: 'Arialbold',
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_orderType == OrderType.group) ...[
-                    const Text(
-                      'Group Order Shipping',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13.5,
-                        fontFamily: 'ArialBold',
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Choose how finished items should be delivered to your group.',
-                      style: TextStyle(
-                        color: AppColors.blackCat.withValues(alpha: 0.65),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    RadioGroup<GroupShippingMode>(
-                      groupValue: _groupShippingMode,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _groupShippingMode = value);
+                    Builder(
+                      builder: (context) {
+                        final selected = (_selectedArtist ?? '').trim();
+                        final options = _dedupeArtistNames(<String>[
+                          ..._filteredArtistOptions(),
+                        ]);
+                        return _AccessibleSearchableSelectField(
+                          value: selected,
+                          hint: 'Select Artist',
+                          semanticLabel: 'Artist',
+                          displayLabel: 'Select One',
+                          items: options,
+                          onChanged: (v) => setState(
+                            () => _selectedArtist = v.trim().isEmpty
+                                ? null
+                                : v.trim(),
+                          ),
+                        );
                       },
-                      child: Column(
+                    ),
+
+                    if ((_selectedArtist ?? '').trim().isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Text(
+                        'If the artist cannot complete the request, do you want the request to go into the request pool for other artists?',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.blackCat.withValues(alpha: 0.75),
+                          height: 1.2,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
                         children: [
-                          RadioListTile<GroupShippingMode>(
-                            value: GroupShippingMode.toMyself,
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            activeColor: AppColors.blackCat,
-                            title: const Text(
-                              "Ship all group members' items to me",
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          ChoiceChip(
+                            label: const Text('Yes'),
+                            selected: _fallbackToPool == true,
+                            selectedColor: AppColors.blackCat,
+                            backgroundColor: _requestSnow,
+                            checkmarkColor: AppColors.snow,
+                            onSelected: (_) =>
+                                setState(() => _fallbackToPool = true),
+                            labelStyle: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                              color: _fallbackToPool == true
+                                  ? AppColors.snow
+                                  : AppColors.blackCat,
                             ),
-                            subtitle: const Text(
-                              "We'll send one consolidated shipment to your address for you to distribute.",
-                              style: TextStyle(fontSize: 12),
+                            side: BorderSide(
+                              color: AppColors.blackCat.withValues(alpha: 0.08),
+                            ),
+                            visualDensity: const VisualDensity(
+                              horizontal: -2,
+                              vertical: -2,
                             ),
                           ),
-                          RadioListTile<GroupShippingMode>(
-                            value: GroupShippingMode.toRespectiveClient,
-                            contentPadding: EdgeInsets.zero,
-                            dense: true,
-                            activeColor: AppColors.blackCat,
-                            title: const Text(
-                              'Ship to each group member individually',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          const SizedBox(width: 10),
+                          ChoiceChip(
+                            label: const Text('No'),
+                            selected: _fallbackToPool == false,
+                            selectedColor: AppColors.blackCat,
+                            backgroundColor: _requestSnow,
+                            checkmarkColor: AppColors.snow,
+                            onSelected: (_) =>
+                                setState(() => _fallbackToPool = false),
+                            labelStyle: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 12,
+                              color: _fallbackToPool == false
+                                  ? AppColors.snow
+                                  : AppColors.blackCat,
                             ),
-                            subtitle: const Text(
-                              "Each group member's items will be shipped directly to their own address.",
-                              style: TextStyle(fontSize: 12),
+                            side: BorderSide(
+                              color: AppColors.blackCat.withValues(alpha: 0.08),
+                            ),
+                            visualDensity: const VisualDensity(
+                              horizontal: -2,
+                              vertical: -2,
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Divider(
-                      height: 1,
-                      color: AppColors.blackCat.withValues(alpha: 0.12),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                  MergeSemantics(
-                    child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Transform.scale(
-                        scale: 0.95,
-                        child: Checkbox(
-                          value: _shippingDifferent,
-                          onChanged: (v) => setState(() {
-                            _shippingDifferent = v ?? false;
-                          }),
-                          activeColor: AppColors.blackCat,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Text(
-                            'Shipping address different from profile address?',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.blackCat.withValues(alpha: 0.75),
-                              height: 1.2,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
                       ),
                     ],
-                    ),
-                  ),
-                  if (_shippingDifferent) ...[
-                    const SizedBox(height: 10),
-                    _fieldLabel('Shipping Address *'),
-                    const SizedBox(height: 10),
-                    _InputField(
-                      controller: _shipStreetCtrl,
-                      hint: 'Street',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      onChanged: (_) => setState(() {
-                        _fieldErrors.remove('shipStreet');
-                        _autofillShippingAddressFromStreet();
-                      }),
-                    ),
-                    if (_shipStreetSuggestionsLoading)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: LinearProgressIndicator(minHeight: 2),
+                  ],
+                ),
+              ),
+
+              const Text(
+                'Budget Range',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arial',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Set your preferred budget range for nail designs.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+              const SizedBox(height: 10),
+              _BudgetCard(
+                values: _sanitizeBudgetRange(_budget),
+                onChanged: (v) =>
+                    setState(() => _budget = _sanitizeBudgetRange(v)),
+                onChangeEnd: (v) => _saveBudgetToDb(_sanitizeBudgetRange(v)),
+              ),
+
+              const SizedBox(height: 18),
+
+              const Text(
+                'Shipping Information',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'Arial',
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Tell us where your finished order should be sent.',
+                style: TextStyle(
+                  color: AppColors.blackCat.withValues(alpha: 0.70),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontFamily: 'Arialbold',
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_orderType == OrderType.group) ...[
+                      const Text(
+                        'Group Order Shipping',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          fontFamily: 'ArialBold',
+                        ),
                       ),
-                    if (_shipStreetSuggestions.isNotEmpty)
-                      Builder(
-                        builder: (context) {
-                          final suggestionCount = _shipStreetSuggestions.length;
-                          final menuHeight =
-                              AutocompleteDropdownSizing.menuHeight(
-                                itemCount: suggestionCount,
-                                itemExtent: 40,
-                              );
-                          return Container(
-                            margin: const EdgeInsets.only(top: 8),
-                            decoration: BoxDecoration(
-                              color: _requestSnow,
-                              borderRadius: BorderRadius.zero,
-                              border: Border.all(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.20,
-                                ),
-                              ),
-                            ),
-                            constraints: BoxConstraints(maxHeight: menuHeight),
-                            child: ListView.separated(
-                              shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
-                                suggestionCount,
-                              ),
-                              physics: AutocompleteDropdownSizing.scrollPhysics(
-                                suggestionCount,
-                              ),
-                              itemCount: suggestionCount,
-                              separatorBuilder: (_, _) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (_, i) => ListTile(
-                                dense: true,
-                                title: Text(
-                                  _shipStreetSuggestions[i].displayLabel,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                onTap: () => _selectShippingStreetSuggestion(
-                                  _shipStreetSuggestions[i],
-                                ),
-                              ),
-                            ),
-                          );
+                      const SizedBox(height: 4),
+                      Text(
+                        'Choose how finished items should be delivered to your group.',
+                        style: TextStyle(
+                          color: AppColors.blackCat.withValues(alpha: 0.65),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      RadioGroup<GroupShippingMode>(
+                        groupValue: _groupShippingMode,
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => _groupShippingMode = value);
                         },
+                        child: Column(
+                          children: [
+                            RadioListTile<GroupShippingMode>(
+                              value: GroupShippingMode.toMyself,
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              activeColor: AppColors.blackCat,
+                              title: const Text(
+                                "Ship all group members' items to me",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                "We'll send one consolidated shipment to your address for you to distribute.",
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                            RadioListTile<GroupShippingMode>(
+                              value: GroupShippingMode.toRespectiveClient,
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              activeColor: AppColors.blackCat,
+                              title: const Text(
+                                'Ship to each group member individually',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: const Text(
+                                "Each group member's items will be shipped directly to their own address.",
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    _InlineError(text: _fieldErrors['shipStreet']),
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipCityCtrl,
-                      hint: 'City',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      onChanged: (_) => setState(() {
-                        _fieldErrors.remove('shipCity');
-                      }),
+                      const SizedBox(height: 14),
+                      Divider(
+                        height: 1,
+                        color: AppColors.blackCat.withValues(alpha: 0.12),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    MergeSemantics(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Transform.scale(
+                            scale: 0.95,
+                            child: Checkbox(
+                              value: _shippingDifferent,
+                              onChanged: (v) => setState(() {
+                                _shippingDifferent = v ?? false;
+                              }),
+                              activeColor: AppColors.blackCat,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: Text(
+                                'Shipping address different from profile address?',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.75,
+                                  ),
+                                  height: 1.2,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    _InlineError(text: _fieldErrors['shipCity']),
-                    const SizedBox(height: 4),
-                    if (_isShipCountryUs) ...[
-                      _AccessibleSearchableSelectField(
-                        value: _shipState,
-                        hint: 'State',
-                        semanticLabel: 'Shipping state',
-                        textInputAction: TextInputAction.next,
-                        nextFocusNode: _shipZipFocusNode,
+                    if (_shippingDifferent) ...[
+                      const SizedBox(height: 10),
+                      _fieldLabel('Shipping Address *'),
+                      const SizedBox(height: 10),
+                      _InputField(
+                        controller: _shipStreetCtrl,
+                        hint: 'Street',
                         minHeight: 52,
                         verticalPadding: 14,
-                        items: usStates,
-                        onChanged: (v) => setState(() {
-                          _shipState = v;
-                          _shipStateCtrl.text = v;
-                          _fieldErrors.remove('shipState');
+                        onChanged: (_) => setState(() {
+                          _fieldErrors.remove('shipStreet');
+                          _autofillShippingAddressFromStreet();
                         }),
                       ),
-                      _InlineError(text: _fieldErrors['shipState']),
-                    ] else ...[
+                      if (_shipStreetSuggestionsLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: LinearProgressIndicator(minHeight: 2),
+                        ),
+                      if (_shipStreetSuggestions.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final suggestionCount =
+                                _shipStreetSuggestions.length;
+                            final menuHeight =
+                                AutocompleteDropdownSizing.menuHeight(
+                                  itemCount: suggestionCount,
+                                  itemExtent: 40,
+                                );
+                            return Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                color: _requestSnow,
+                                borderRadius: BorderRadius.zero,
+                                border: Border.all(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.20,
+                                  ),
+                                ),
+                              ),
+                              constraints: BoxConstraints(
+                                maxHeight: menuHeight,
+                              ),
+                              child: ListView.separated(
+                                shrinkWrap:
+                                    AutocompleteDropdownSizing.shrinkWrap(
+                                      suggestionCount,
+                                    ),
+                                physics:
+                                    AutocompleteDropdownSizing.scrollPhysics(
+                                      suggestionCount,
+                                    ),
+                                itemCount: suggestionCount,
+                                separatorBuilder: (_, _) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (_, i) => ListTile(
+                                  dense: true,
+                                  title: Text(
+                                    _shipStreetSuggestions[i].displayLabel,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () => _selectShippingStreetSuggestion(
+                                    _shipStreetSuggestions[i],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      _InlineError(text: _fieldErrors['shipStreet']),
+                      const SizedBox(height: 4),
                       _InputField(
-                        controller: _shipStateCtrl,
-                        hint: 'State/Region (Optional)',
+                        controller: _shipCityCtrl,
+                        hint: 'City',
                         minHeight: 52,
                         verticalPadding: 14,
-                        onChanged: (v) => _shipState = v,
+                        onChanged: (_) => setState(() {
+                          _fieldErrors.remove('shipCity');
+                        }),
                       ),
-                    ],
-                    const SizedBox(height: 4),
-                    _InputField(
-                      controller: _shipZipCtrl,
-                      focusNode: _shipZipFocusNode,
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      hint: _isShipCountryUs ? 'Zip' : 'Zip (Optional)',
-                      onChanged: (_) => setState(() {
-                        _fieldErrors.remove('shipZip');
-                      }),
-                    ),
-                    _InlineError(text: _fieldErrors['shipZip']),
-                    const SizedBox(height: 4),
-                    _AccessibleSearchableSelectField(
-                      value: _shipCountry,
-                      hint: 'Country',
-                      semanticLabel: 'Shipping country',
-                      minHeight: 52,
-                      verticalPadding: 14,
-                      items: countries,
-                      onChanged: (v) => setState(() {
-                        _shipCountry = v.trim().isEmpty ? 'United States' : v;
-                        _fieldErrors.remove('shipCountry');
-                        if (!_isShipCountryUs) {
-                          _fieldErrors.remove('shipState');
+                      _InlineError(text: _fieldErrors['shipCity']),
+                      const SizedBox(height: 4),
+                      if (_isShipCountryUs) ...[
+                        _AccessibleSearchableSelectField(
+                          value: _shipState,
+                          hint: 'State',
+                          semanticLabel: 'Shipping state',
+                          textInputAction: TextInputAction.next,
+                          nextFocusNode: _shipZipFocusNode,
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          items: usStates,
+                          onChanged: (v) => setState(() {
+                            _shipState = v;
+                            _shipStateCtrl.text = v;
+                            _fieldErrors.remove('shipState');
+                          }),
+                        ),
+                        _InlineError(text: _fieldErrors['shipState']),
+                      ] else ...[
+                        _InputField(
+                          controller: _shipStateCtrl,
+                          hint: 'State/Region (Optional)',
+                          minHeight: 52,
+                          verticalPadding: 14,
+                          onChanged: (v) => _shipState = v,
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      _InputField(
+                        controller: _shipZipCtrl,
+                        focusNode: _shipZipFocusNode,
+                        minHeight: 52,
+                        verticalPadding: 14,
+                        hint: _isShipCountryUs ? 'Zip' : 'Zip (Optional)',
+                        onChanged: (_) => setState(() {
                           _fieldErrors.remove('shipZip');
-                        }
-                      }),
-                    ),
-                    _InlineError(text: _fieldErrors['shipCountry']),
+                        }),
+                      ),
+                      _InlineError(text: _fieldErrors['shipZip']),
+                      const SizedBox(height: 4),
+                      _AccessibleSearchableSelectField(
+                        value: _shipCountry,
+                        hint: 'Country',
+                        semanticLabel: 'Shipping country',
+                        minHeight: 52,
+                        verticalPadding: 14,
+                        items: countries,
+                        onChanged: (v) => setState(() {
+                          _shipCountry = v.trim().isEmpty ? 'United States' : v;
+                          _fieldErrors.remove('shipCountry');
+                          if (!_isShipCountryUs) {
+                            _fieldErrors.remove('shipState');
+                            _fieldErrors.remove('shipZip');
+                          }
+                        }),
+                      ),
+                      _InlineError(text: _fieldErrors['shipCountry']),
+                    ],
                   ],
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.blackCat,
-                  foregroundColor: _requestSnow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
                 ),
-                onPressed: _isSubmitting ? null : _submitRequest,
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            _requestSnow,
+              ),
+
+              const SizedBox(height: 18),
+
+              SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.blackCat,
+                    foregroundColor: _requestSnow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                  ),
+                  onPressed: _isSubmitting ? null : _submitRequest,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _requestSnow,
+                            ),
+                          ),
+                        )
+                      : const Text(
+                          'Submit Request',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
-                      )
-                    : const Text(
-                        'Submit Request',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+          bottomNavigationBar: widget.showBottomNav
+              ? _buildBottomNav(context)
+              : null,
         ),
-        bottomNavigationBar: widget.showBottomNav
-            ? _buildBottomNav(context)
-            : null,
       ),
     );
   }
@@ -4559,121 +4596,140 @@ class _AvatarMenu extends StatelessWidget {
       child: Focus(
         focusNode: focusNode,
         child: PopupMenuButton<String>(
-      tooltip: 'Account menu',
-      offset: const Offset(0, 55),
-      elevation: 8,
-      color: _requestSnow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      onSelected: onSelected,
-      onCanceled: onCanceled,
-      itemBuilder: (context) => [
-        if (showProfile)
-          PopupMenuItem<String>(
-            value: 'profile',
-            child: Row(
-              children: const [
-                Icon(Icons.person_outline, size: 22),
-                SizedBox(width: 14),
-                Text(
-                  'Profile',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (showHistory)
-          PopupMenuItem<String>(
-            value: 'history',
-            child: Row(
-              children: const [
-                Icon(Icons.history, size: 22),
-                SizedBox(width: 14),
-                Text(
-                  'History',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (showCalendar)
-          PopupMenuItem<String>(
-            value: 'calendar',
-            child: Row(
-              children: const [
-                Icon(Icons.calendar_month_outlined, size: 22),
-                SizedBox(width: 14),
-                Text(
-                  'Calendar',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (showArtist)
-          PopupMenuItem<String>(
-            value: 'artist',
-            child: Row(
-              children: const [
-                Icon(Icons.brush_outlined, size: 22),
-                SizedBox(width: 14),
-                Text(
-                  'Artist',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (showReviews)
-          PopupMenuItem<String>(
-            value: 'reviews',
-            child: Row(
-              children: const [
-                Icon(Icons.star_border, size: 22),
-                SizedBox(width: 14),
-                Text(
-                  'Reviews',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        if (showProfile ||
-            showHistory ||
-            showCalendar ||
-            showArtist ||
-            showReviews)
-          const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'logout',
-          child: Row(
-            children: const [
-              Icon(Icons.logout_rounded, size: 22, color: AppColors.blackCat),
-              SizedBox(width: 14),
-              Text(
-                'Logout',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.blackCat,
+          tooltip: 'Account menu',
+          offset: const Offset(0, 55),
+          elevation: 8,
+          color: _requestSnow,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          onSelected: onSelected,
+          onCanceled: onCanceled,
+          itemBuilder: (context) => [
+            if (showProfile)
+              PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: const [
+                    Icon(Icons.person_outline, size: 22),
+                    SizedBox(width: 14),
+                    Text(
+                      'Profile',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            if (showHistory)
+              PopupMenuItem<String>(
+                value: 'history',
+                child: Row(
+                  children: const [
+                    Icon(Icons.history, size: 22),
+                    SizedBox(width: 14),
+                    Text(
+                      'History',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (showCalendar)
+              PopupMenuItem<String>(
+                value: 'calendar',
+                child: Row(
+                  children: const [
+                    Icon(Icons.calendar_month_outlined, size: 22),
+                    SizedBox(width: 14),
+                    Text(
+                      'Calendar',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (showArtist)
+              PopupMenuItem<String>(
+                value: 'artist',
+                child: Row(
+                  children: const [
+                    Icon(Icons.brush_outlined, size: 22),
+                    SizedBox(width: 14),
+                    Text(
+                      'Artist',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (showReviews)
+              PopupMenuItem<String>(
+                value: 'reviews',
+                child: Row(
+                  children: const [
+                    Icon(Icons.star_border, size: 22),
+                    SizedBox(width: 14),
+                    Text(
+                      'Reviews',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (showProfile ||
+                showHistory ||
+                showCalendar ||
+                showArtist ||
+                showReviews)
+              const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: 'logout',
+              child: Row(
+                children: const [
+                  Icon(
+                    Icons.logout_rounded,
+                    size: 22,
+                    color: AppColors.blackCat,
+                  ),
+                  SizedBox(width: 14),
+                  Text(
+                    'Logout',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          child: SizedBox(
+            height: JntHeaderMetrics.avatarSize,
+            width: JntHeaderMetrics.avatarSize,
+            child: ClipRRect(
+              borderRadius: BorderRadius.zero,
+              child: ClientProfileAvatarIcon(
+                imageUrl: avatarUrl,
+                displayName: displayName,
+                size: JntHeaderMetrics.avatarSize,
+                resolveCurrentUserFallback: true,
+              ),
+            ),
           ),
-        ),
-      ],
-      child: SizedBox(
-        height: JntHeaderMetrics.avatarSize,
-        width: JntHeaderMetrics.avatarSize,
-        child: ClipRRect(
-          borderRadius: BorderRadius.zero,
-          child: ClientProfileAvatarIcon(
-            imageUrl: avatarUrl,
-            displayName: displayName,
-            size: JntHeaderMetrics.avatarSize,
-            resolveCurrentUserFallback: true,
-          ),
-        ),
-      ),
         ),
       ),
     );
@@ -4944,7 +5000,6 @@ class _FocusRingWrapper extends StatelessWidget {
   }
 }
 
-
 mixin _AccessibleDropdownLifecycle<T extends StatefulWidget> on State<T> {
   final FocusNode dropdownFocusNode = FocusNode(
     debugLabel: 'accessibleSearchableDropdown',
@@ -4967,9 +5022,7 @@ mixin _AccessibleDropdownLifecycle<T extends StatefulWidget> on State<T> {
   void closeDropdownAndKeyboard() {
     dropdownMenuController.close();
     dropdownFocusNode.unfocus();
-    unawaited(
-      SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
-    );
+    unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
   }
 
   Widget accessibilityDropdownBoundary({required Widget child}) {
@@ -5001,6 +5054,7 @@ class _AccessibleSearchableSelectField extends StatefulWidget {
     required this.items,
     required this.onChanged,
     this.semanticLabel,
+    this.displayLabel,
     this.textInputAction = TextInputAction.done,
     this.nextFocusNode,
     this.minHeight = 52,
@@ -5012,6 +5066,15 @@ class _AccessibleSearchableSelectField extends StatefulWidget {
   final List<String> items;
   final ValueChanged<String> onChanged;
   final String? semanticLabel;
+  // Optional override for the VISIBLE placeholder text (the DropdownMenu's
+  // floating label, shown large inside the box when nothing is selected).
+  // Without this, the visible text falls back to semanticLabel -- fine for
+  // fields where the a11y label already reads well on screen (e.g. "State"),
+  // but wrong for a field like Artist, where the a11y label needs to stay
+  // descriptive ("Artist") while the visible text should read as an
+  // instruction ("Select One"). Leaving this null preserves every existing
+  // caller's current appearance exactly.
+  final String? displayLabel;
   final TextInputAction textInputAction;
   final FocusNode? nextFocusNode;
   final double minHeight;
@@ -5069,6 +5132,7 @@ class _AccessibleSearchableSelectFieldState
         .toList(growable: false);
     final selectedValue = widget.value.trim();
     final label = (widget.semanticLabel ?? widget.hint).trim();
+    final visibleLabel = (widget.displayLabel ?? label).trim();
 
     // Do not attach the accessibility-exit close timer to the searchable
     // field. Its semantics update for every typed character, which otherwise
@@ -5084,85 +5148,89 @@ class _AccessibleSearchableSelectFieldState
         ),
         child: ExcludeSemantics(
           child: DropdownMenu<String>(
-        key: ValueKey<String>(
-          '$label|$selectedValue|${normalizedItems.length}',
-        ),
-        focusNode: dropdownFocusNode,
-        menuController: dropdownMenuController,
-        initialSelection:
-            normalizedItems.contains(selectedValue) ? selectedValue : null,
-        // Keep every option available when a value is already selected.
-        // Typing still searches/highlights matches, but users never have to
-        // erase the current State or Country before swiping the full list.
-        enableFilter: false,
-        enableSearch: true,
-        requestFocusOnTap: true,
-        textInputAction: widget.textInputAction,
-        expandedInsets: EdgeInsets.zero,
-        menuHeight: 240,
-        label: Text(label),
-        hintText: widget.hint,
-        textStyle: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w400,
-          color: AppColors.blackCat,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          isDense: true,
-          filled: true,
-          fillColor: _requestSnow,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: widget.verticalPadding,
-          ),
-          constraints: BoxConstraints(minHeight: widget.minHeight),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: _requestBorder,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: _requestBorder,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.zero,
-            borderSide: _requestBorder,
-          ),
-        ),
-        menuStyle: const MenuStyle(
-          backgroundColor: WidgetStatePropertyAll<Color>(_requestSnow),
-          shape: WidgetStatePropertyAll<OutlinedBorder>(
-            RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          ),
-        ),
-        dropdownMenuEntries: normalizedItems
-            .map(
-              (item) => DropdownMenuEntry<String>(
-                value: item,
-                label: item,
-                labelWidget: accessibilityDropdownOption(item),
-                style: const ButtonStyle(
-                  minimumSize: WidgetStatePropertyAll<Size>(
-                    Size.fromHeight(48),
-                  ),
-                ),
+            key: ValueKey<String>(
+              '$label|$selectedValue|${normalizedItems.length}',
+            ),
+            focusNode: dropdownFocusNode,
+            menuController: dropdownMenuController,
+            initialSelection: normalizedItems.contains(selectedValue)
+                ? selectedValue
+                : null,
+            // Keep every option available when a value is already selected.
+            // Typing still searches/highlights matches, but users never have to
+            // erase the current State or Country before swiping the full list.
+            enableFilter: false,
+            enableSearch: true,
+            requestFocusOnTap: true,
+            textInputAction: widget.textInputAction,
+            expandedInsets: EdgeInsets.zero,
+            menuHeight: 240,
+            label: Text(
+              visibleLabel,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
+            ),
+            hintText: widget.hint,
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+              color: AppColors.blackCat,
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              isDense: true,
+              filled: true,
+              fillColor: _requestSnow,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: widget.verticalPadding,
               ),
-            )
-            .toList(growable: false),
-        onSelected: (selection) {
-          if (selection == null) return;
-          widget.onChanged(selection);
-          dropdownMenuController.close();
-          dropdownFocusNode.unfocus();
-          unawaited(
-            SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
-          );
-          SemanticsService.sendAnnouncement(
-            View.of(context),
-            '$selection selected',
-            Directionality.of(context),
-          );
-        },
+              constraints: BoxConstraints(minHeight: widget.minHeight),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+                borderSide: _requestBorder,
+              ),
+            ),
+            menuStyle: const MenuStyle(
+              backgroundColor: WidgetStatePropertyAll<Color>(_requestSnow),
+              shape: WidgetStatePropertyAll<OutlinedBorder>(
+                RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              ),
+            ),
+            dropdownMenuEntries: normalizedItems
+                .map(
+                  (item) => DropdownMenuEntry<String>(
+                    value: item,
+                    label: item,
+                    labelWidget: accessibilityDropdownOption(item),
+                    style: const ButtonStyle(
+                      minimumSize: WidgetStatePropertyAll<Size>(
+                        Size.fromHeight(48),
+                      ),
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+            onSelected: (selection) {
+              if (selection == null) return;
+              widget.onChanged(selection);
+              dropdownMenuController.close();
+              dropdownFocusNode.unfocus();
+              unawaited(
+                SystemChannels.textInput.invokeMethod<void>('TextInput.hide'),
+              );
+              SemanticsService.sendAnnouncement(
+                View.of(context),
+                '$selection selected',
+                Directionality.of(context),
+              );
+            },
           ),
         ),
       ),
@@ -5237,9 +5305,7 @@ class _AccessibleOptionPickerState extends State<_AccessibleOptionPicker> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   labelText: 'Search ${widget.label}',
-                  prefixIcon: const ExcludeSemantics(
-                    child: Icon(Icons.search),
-                  ),
+                  prefixIcon: const ExcludeSemantics(child: Icon(Icons.search)),
                   border: const OutlineInputBorder(
                     borderRadius: BorderRadius.zero,
                   ),
@@ -5262,6 +5328,7 @@ class _AccessibleOptionPickerState extends State<_AccessibleOptionPicker> {
                       );
                       Navigator.of(context).pop(item);
                     }
+
                     return Semantics(
                       button: true,
                       selected: selected,
@@ -5341,8 +5408,7 @@ class _AccessibleClientDropdownState extends State<_AccessibleClientDropdown>
         controller: widget.controller,
         focusNode: dropdownFocusNode,
         menuController: dropdownMenuController,
-        initialSelection:
-            selectedExists ? widget.selectedClientId : null,
+        initialSelection: selectedExists ? widget.selectedClientId : null,
         enableFilter: true,
         enableSearch: true,
         requestFocusOnTap: true,
@@ -5505,70 +5571,70 @@ class _BudgetCard extends StatelessWidget {
         explicitChildNodes: true,
         label: 'Maximum allowed, 5,000 dollars',
         child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Semantics(
-              sortKey: const OrdinalSortKey(1),
-              label: 'Minimum ${start.round()} dollars, disabled',
-              child: ExcludeSemantics(
-                child: TextFormField(
-                  key: ValueKey<int>(start.round()),
-                  initialValue: start.round().toString(),
-                  enabled: false,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Min',
-                    prefixText: '\$',
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Semantics(
+                sortKey: const OrdinalSortKey(1),
+                label: 'Minimum ${start.round()} dollars, disabled',
+                child: ExcludeSemantics(
+                  child: TextFormField(
+                    key: ValueKey<int>(start.round()),
+                    initialValue: start.round().toString(),
+                    enabled: false,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Min',
+                      prefixText: '\$',
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(
-                  sortKey: const OrdinalSortKey(2),
-                  child: TextFormField(
-                  key: ValueKey<String>('max-${start.round()}'),
-                  initialValue: '',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(4),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Max',
-                    prefix: ExcludeSemantics(child: Text('\$')),
-                  ),
-                  onChanged: (raw) {
-                    final parsed = double.tryParse(raw);
-                    if (parsed == null) return;
-                    final next = parsed.clamp(start, 5000.0).toDouble();
-                    final range = RangeValues(start, next);
-                    onChanged(range);
-                    onChangeEnd(range);
-                  },
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ExcludeSemantics(
-                  child: Text(
-                    'Maximum allowed: \$5,000',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    sortKey: const OrdinalSortKey(2),
+                    child: TextFormField(
+                      key: ValueKey<String>('max-${start.round()}'),
+                      initialValue: '',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(4),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Max',
+                        prefix: ExcludeSemantics(child: Text('\$')),
+                      ),
+                      onChanged: (raw) {
+                        final parsed = double.tryParse(raw);
+                        if (parsed == null) return;
+                        final next = parsed.clamp(start, 5000.0).toDouble();
+                        final range = RangeValues(start, next);
+                        onChanged(range);
+                        onChangeEnd(range);
+                      },
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  ExcludeSemantics(
+                    child: Text(
+                      'Maximum allowed: \$5,000',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );

@@ -11,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../services/notifications_service.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
@@ -942,7 +943,10 @@ class _ClientHomePageState extends State<ClientHomePage> {
               child: RefreshIndicator(
                 onRefresh: _loadTrendingProducts,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  padding: responsivePagePadding(
+                    context,
+                    phone: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  ),
                   children: <Widget>[
                     const SizedBox(height: 14),
                     const SizedBox(height: 6),
@@ -976,13 +980,19 @@ class _ClientHomePageState extends State<ClientHomePage> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _products.length,
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 0.78,
-                            ),
+                        gridDelegate: isTabletSize(MediaQuery.sizeOf(context))
+                            ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 280,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 0.78,
+                              )
+                            : const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                childAspectRatio: 0.78,
+                              ),
                         itemBuilder: (context, index) {
                           final p = _products[index];
                           return _ProductTile(
@@ -1235,7 +1245,7 @@ class _NfcTag extends StatelessWidget {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'Accepts NFC',
+        'Accepts JNT Tap',
         style: TextStyle(
           fontSize: 10.5,
           fontWeight: FontWeight.w700,

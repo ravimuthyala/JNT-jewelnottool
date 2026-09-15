@@ -16,6 +16,50 @@ import 'branding_company_shell_page.dart';
 import 'client_artist_home_page.dart';
 import '../services/delivered_review_deep_link.dart';
 
+/// Thrown by [LoginDialog.restoredSessionHome] when the restored session
+/// belongs to an account an admin has deactivated. The session is already
+/// signed out by the time this is thrown; the caller just needs to show the
+/// right message instead of the generic "unable to restore" error.
+class AccountDeactivatedException implements Exception {
+  const AccountDeactivatedException();
+}
+
+/// True when the account row's is_blocked/blocked/account_status/panel_status
+/// fields (whichever the row actually has -- client/artist/client_artist/
+/// company all use slightly different subsets of these) mark it deactivated.
+///
+/// Public so main.dart's realtime deactivation watchdog can reuse the exact
+/// same check on rows it receives directly from postgres_changes payloads.
+bool isAccountBlocked(Map<String, dynamic> data) {
+  final status = (data['account_status'] ?? data['panel_status'] ?? '')
+      .toString()
+      .trim()
+      .toLowerCase();
+  final blocked =
+      data['is_blocked'] == true || data['blocked'] == true || status == 'blocked';
+  debugPrint(
+    '[BLOCKCHECK] id=${data['id']} email=${data['email']} '
+    'is_blocked=${data['is_blocked']} blocked=${data['blocked']} '
+    'account_status=${data['account_status']} panel_status=${data['panel_status']} '
+    '=> blocked=$blocked',
+  );
+  return blocked;
+}
+
+/// Loads the currently signed-in user's account row and reports whether it
+/// is blocked. Every login entry point in the app (the generic [LoginDialog]
+/// and the standalone [ArtistLoginPage]) must call this right after
+/// authenticating and before routing into a signed-in shell -- Supabase Auth
+/// itself has no concept of "deactivated," so nothing else stops a blocked
+/// account from signing back in.
+Future<bool> isCurrentSessionAccountBlocked() async {
+  final uid = Supabase.instance.client.auth.currentUser?.id;
+  if (uid == null || uid.trim().isEmpty) return false;
+  final doc = await _LoginDialogState._loadAccountDocWithRetry(uid);
+  if (doc == null) return false;
+  return isAccountBlocked(doc.data);
+}
+
 class LoginDialog extends StatefulWidget {
   const LoginDialog({super.key});
 
@@ -42,6 +86,10 @@ class LoginDialog extends StatefulWidget {
     }
 
     final data = accountDoc.data;
+    if (isAccountBlocked(data)) {
+      await Supabase.instance.client.auth.signOut();
+      throw const AccountDeactivatedException();
+    }
     final sourceCollection = accountDoc.collection;
     final roles = (data['roles'] as Map<String, dynamic>?) ?? const {};
     final hasExplicitRoles = roles.isNotEmpty;
@@ -341,6 +389,13 @@ class _LoginDialogState extends State<LoginDialog> {
       LoginDialog.pendingVerifiedRole = null;
 
       if (data != null) {
+        if (isAccountBlocked(data)) {
+          _authLog('account is blocked; signing out');
+          await SupabaseAuthService.logout();
+          if (!mounted) return;
+          _setError('Your account has been deactivated. Contact support.');
+          return;
+        }
         final sourceCollection = accountDoc!.collection;
         final roles = (data['roles'] as Map<String, dynamic>?) ?? const {};
 

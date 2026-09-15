@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -19,10 +20,22 @@ import '../utils/company_bio_loader.dart';
 import '../services/shipping_qr_helper.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/shipping_qr_widgets.dart';
+import '../utlis/responsive_layout.dart';
 
 part 'artist_completed_details_tab.dart';
 part 'artist_completed_photos_tab.dart';
 part 'artist_completed_shipping_tab.dart';
+
+// Real Shippo label purchase needs the Shippo *secret* API token, which
+// must never ship inside the Flutter app -- see
+// supabase/functions/create-shipping-label/index.ts, which is written but
+// not deployed yet. Until that function is deployed and this flag is
+// flipped, "Get Shipping Label" only simulates a label so the rest of the
+// ready-to-ship flow (auto-filled courier/tracking, Track Order) can be
+// tested end to end. Flipping it requires deploying create-shipping-label
+// and shippo-webhook, and setting SHIPPO_API_TOKEN as an Edge Function
+// secret.
+const bool kShippingLiveEnabled = false;
 
 /// One row in the "ship to each group member individually" list -- the
 /// primary client (key 'self') plus every group member.
@@ -92,6 +105,10 @@ Future<void> showCompletedRequestSheet({
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _CompletedRequestSheet(
       request: request,
@@ -359,6 +376,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   String _dbShippingLabelPdfUrl = '';
   String _dbShippingLabelCarrier = '';
   String _dbShippingLabelTrackingNumber = '';
+  bool _generatingShippingLabel = false;
+  Map<String, Map<String, dynamic>> _dbRecipientShippingLabels = {};
+  final Set<String> _generatingShippingLabelFor = {};
 
   final _couriers = const ['USPS', 'UPS', 'FedEx', 'DHL'];
 
@@ -428,6 +448,8 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     _requestAccessibleFocus(_closeFocusNode);
   }
 
+  RealtimeChannel? _shippingLabelChannel;
+
   @override
   void initState() {
     super.initState();
@@ -440,10 +462,32 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
       _courier = prefillCourier;
     }
     Future<void>.microtask(_loadLatestShippingLabel);
+    _listenForShippingLabelUpdates();
+  }
+
+  // Keeps this sheet's label/tracking fields live if admin (or the artist on
+  // another device) updates the row while it's open, instead of only ever
+  // reflecting the one-time load from initState.
+  void _listenForShippingLabelUpdates() {
+    _shippingLabelChannel = _supabase
+        .channel('shipping-label-${widget.request.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: _requestTable,
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: widget.request.id,
+          ),
+          callback: (_) => _loadLatestShippingLabel(),
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
+    _shippingLabelChannel?.unsubscribe();
     _trackingCtrl.dispose();
     _shippedDateCtrl.dispose(); // ✅ NEW
     for (final ctrl in _recipientTrackingCtrls.values) {
@@ -538,9 +582,17 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   bool get _isShippingLabelReady {
+    // shipping_status is set to 'label_ready' by artist_mark_request_completed
+    // the moment the order is marked completed -- before any real label
+    // exists -- so it can't be trusted on its own here. Only treat the
+    // label as ready once there's an actual label marker (the explicit
+    // shipping_label_ready column, or real qr/pdf/tracking data).
     if (_dbShippingLabelReady == true) return true;
-    if (_shippingStatusValue.toLowerCase() == 'label_ready') return true;
-    if (_shippingQrValue.isNotEmpty) return true;
+    // _shippingQrValue is intentionally NOT used as a readiness signal --
+    // it also includes the generic "scan to confirm shipment" QR that's
+    // always present from completion time on (see _dbShippingQrCode).
+    // _dbShippingLabelQrData is the real-label-only QR namespace.
+    if (_dbShippingLabelQrData.isNotEmpty) return true;
     if (_shippingPdfValue.isNotEmpty) return true;
     if (_shippingTrackingValue.isNotEmpty) return true;
     return widget.request.shippingLabelReady;
@@ -558,22 +610,10 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
     widget.request.shippingLabelPdfUrl,
   ]);
 
-  String get _shippingCarrierValue => _firstNonEmpty([
-    _dbShippingLabelCarrier,
-    widget.request.shippingLabelCarrier,
-    _courier ?? '',
-    'USPS',
-  ]);
-
   String get _shippingTrackingValue => _firstNonEmpty([
     _dbShippingLabelTrackingNumber,
     widget.request.shippingLabelTrackingNumber,
     _trackingCtrl.text,
-  ]);
-
-  String get _shippingStatusValue => _firstNonEmpty([
-    widget.request.shippingStatus,
-    _dbShippingLabelReady == true ? 'label_ready' : '',
   ]);
 
   String _firstNonEmpty(Iterable<Object?> values) {
@@ -624,7 +664,12 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             rootData['shippingLabelQrData'],
             payload['shippingLabelQrData'],
             details['shippingLabelQrData'],
-            shipping['qrCode'],
+            // Deliberately NOT shipping['qrCode'] -- that's the generic
+            // "scan to confirm shipment" QR buildShippingPayload() always
+            // writes into data.shipping.qrCode at completion time, before
+            // any real label exists. shippingLabel['qrData'] below is the
+            // separate, real-label namespace (data.shippingLabel), only
+            // populated once admin or Shippo actually creates a label.
             shippingLabel['qrData'],
           ]).isNotEmpty;
       if (!mounted) return;
@@ -674,10 +719,238 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
             _couriers.contains(_dbShippingLabelCarrier)) {
           _courier = _dbShippingLabelCarrier;
         }
+
+        // Per-recipient labels (group orders shipping to each member
+        // individually) live under data.shippingLabels.<recipientKey>,
+        // separate from the single-label columns above.
+        final recipientLabels = <String, dynamic>{
+          ..._asMap(rootData['shippingLabels']),
+          ..._asMap(payload['shippingLabels']),
+          ..._asMap(details['shippingLabels']),
+        };
+        _dbRecipientShippingLabels = {
+          for (final entry in recipientLabels.entries)
+            entry.key: _asMap(entry.value),
+        };
+        for (final entry in _dbRecipientShippingLabels.entries) {
+          final tracking = _firstNonEmpty([entry.value['trackingNumber']]);
+          if (tracking.isNotEmpty) {
+            _trackingCtrlFor(entry.key).text = tracking;
+          }
+          final carrier = _firstNonEmpty([entry.value['carrier']]);
+          if (carrier.isNotEmpty && _couriers.contains(carrier)) {
+            _recipientCouriers[entry.key] = carrier;
+          }
+        }
       });
     } catch (_) {
       // Best-effort refresh only. The sheet still renders from widget.request.
     }
+  }
+
+  Map<String, dynamic> _recipientLabel(String key) =>
+      _dbRecipientShippingLabels[key] ?? const <String, dynamic>{};
+
+  bool _recipientLabelReady(String key) {
+    final label = _recipientLabel(key);
+    return _asBool(label['ready']) ||
+        _firstNonEmpty([label['trackingNumber']]).isNotEmpty;
+  }
+
+  String _recipientLabelCarrier(String key) =>
+      _firstNonEmpty([_recipientLabel(key)['carrier']]);
+
+  String _recipientLabelQr(String key) =>
+      _firstNonEmpty([_recipientLabel(key)['qrData']]);
+
+  String _recipientLabelPdf(String key) =>
+      _firstNonEmpty([_recipientLabel(key)['pdfUrl']]);
+
+  /// Entry point for the "Get Shipping Label" action. Routes to the real
+  /// Shippo call once kShippingLiveEnabled is flipped on; simulates a label
+  /// for testing otherwise -- same shape as _payNow/_simulatePayment in
+  /// order_details_pages.dart for Stripe.
+  Future<void> _getShippingLabel() async {
+    if (_generatingShippingLabel) return;
+    setState(() => _generatingShippingLabel = true);
+    try {
+      if (kShippingLiveEnabled) {
+        // await _supabase.functions.invoke('create-shipping-label', body: {
+        //   'requestId': widget.request.id,
+        //   'sourceCollection': widget.request.sourceCollection,
+        // });
+      } else {
+        await _simulateGenerateShippingLabel();
+      }
+      await _loadLatestShippingLabel();
+    } finally {
+      if (mounted) setState(() => _generatingShippingLabel = false);
+    }
+  }
+
+  /// Writes fabricated label/tracking data onto the request row so the rest
+  /// of the ready-to-ship flow (auto-filled courier/tracking on the Mark as
+  /// Shipped form, Track Order display) can be exercised before Shippo is
+  /// live. Mirrors the columns supabase/functions/create-shipping-label
+  /// will write for real.
+  Future<void> _simulateGenerateShippingLabel() async {
+    final now = DateTime.now();
+    final carrier = _dbShippingLabelCarrier.isNotEmpty
+        ? _dbShippingLabelCarrier
+        : (_couriers.contains(_courier) ? _courier! : _couriers.first);
+    final tracking = _simulatedTrackingNumberFor(carrier, now);
+    await _supabase
+        .from(_requestTable)
+        .update({
+          'shipping_label_ready': true,
+          'shipping_label_carrier': carrier,
+          'shipping_label_tracking_number': tracking,
+          'shipping_label_qr_data': tracking,
+          'shipping_qr_code': tracking,
+          'shipping_label_created_at': now.toIso8601String(),
+          'shipping_status': 'label_ready',
+          'estimated_delivery_at': now
+              .add(const Duration(days: 5))
+              .toIso8601String(),
+          'updated_at': now.toIso8601String(),
+        })
+        .eq('id', widget.request.id);
+  }
+
+  String _simulatedTrackingNumberFor(
+    String carrier,
+    DateTime now, {
+    String seed = '',
+  }) {
+    final base = now.millisecondsSinceEpoch + seed.hashCode.abs() % 100000;
+    final digits = base.toString();
+    final tail = digits.substring(math.max(0, digits.length - 10));
+    switch (carrier) {
+      case 'UPS':
+        return '1Z$tail SIM';
+      case 'FedEx':
+        return '$tail${tail.substring(0, 4)}';
+      case 'DHL':
+        return 'DHL$tail';
+      case 'USPS':
+      default:
+        return '9400 $tail SIM';
+    }
+  }
+
+  /// Entry point for the per-recipient "Get Shipping Label" action shown on
+  /// group orders that ship to each member individually -- same
+  /// simulate/live split as _getShippingLabel, but scoped to one recipient's
+  /// entry under data.shippingLabels.
+  Future<void> _getShippingLabelForRecipient(
+    _ShipmentRecipient recipient,
+  ) async {
+    if (_generatingShippingLabelFor.contains(recipient.key)) return;
+    setState(() => _generatingShippingLabelFor.add(recipient.key));
+    try {
+      if (kShippingLiveEnabled) {
+        // await _supabase.functions.invoke('create-shipping-label', body: {
+        //   'requestId': widget.request.id,
+        //   'sourceCollection': widget.request.sourceCollection,
+        //   'recipientKey': recipient.key,
+        // });
+      } else {
+        await _simulateGenerateShippingLabelForRecipient(recipient);
+      }
+      await _loadLatestShippingLabel();
+    } finally {
+      if (mounted) {
+        setState(() => _generatingShippingLabelFor.remove(recipient.key));
+      }
+    }
+  }
+
+  Future<void> _simulateGenerateShippingLabelForRecipient(
+    _ShipmentRecipient recipient,
+  ) async {
+    final now = DateTime.now();
+    final existingCarrier = _recipientLabelCarrier(recipient.key);
+    final carrier = existingCarrier.isNotEmpty
+        ? existingCarrier
+        : _couriers.first;
+    final tracking = _simulatedTrackingNumberFor(
+      carrier,
+      now,
+      seed: recipient.key,
+    );
+
+    final row = await _supabase
+        .from(_requestTable)
+        .select('data')
+        .eq('id', widget.request.id)
+        .maybeSingle();
+    final currentData = _asMap(row?['data']);
+    final currentLabels = _asMap(currentData['shippingLabels']);
+    final updatedLabels = <String, dynamic>{
+      ...currentLabels,
+      recipient.key: {
+        'ready': true,
+        'carrier': carrier,
+        'trackingNumber': tracking,
+        'qrData': tracking,
+        'pdfUrl': '',
+        'recipientName': recipient.name,
+        'createdAt': now.toIso8601String(),
+      },
+    };
+
+    await _supabase
+        .from(_requestTable)
+        .update({
+          'data': {...currentData, 'shippingLabels': updatedLabels},
+          'updated_at': now.toIso8601String(),
+        })
+        .eq('id', widget.request.id);
+  }
+
+  Future<void> _openLabelPreviewForRecipient(
+    _ShipmentRecipient recipient,
+  ) async {
+    final pdfUrl = _recipientLabelPdf(recipient.key);
+    final link = pdfUrl.trim().isEmpty
+        ? 'jnt://shipping/label?order=${widget.request.id}&recipient=${recipient.key}&download=1'
+        : pdfUrl.trim();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: Text(
+          'Shipping Label — ${recipient.name}',
+          style: const TextStyle(fontSize: 12),
+        ),
+        content: Text(
+          'Label link ready for download/print:\n\n$link',
+          style: const TextStyle(fontSize: 11),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openQrDialogForRecipient(_ShipmentRecipient recipient) async {
+    final storedQr = _recipientLabelQr(recipient.key);
+    final qr = storedQr.isNotEmpty && storedQr.length <= _maxQrDataLength
+        ? storedQr
+        : generateShippingQrCode(
+            collectionName: widget.request.sourceCollection,
+            orderDocId: widget.request.id,
+            orderNumber:
+                '${widget.request.orderNumber.trim().isNotEmpty ? widget.request.orderNumber.trim() : widget.request.id}-${recipient.key}',
+            artistId: widget.request.acceptedByArtistEmail.trim(),
+          );
+    if (!mounted) return;
+    await showSimpleQrPrintDialog(context, qr);
   }
 
   Future<void> _pickShippedDate() async {
@@ -717,6 +990,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final sheetMediaQuery = MediaQuery.of(context);
 
@@ -757,9 +1031,9 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: EdgeInsets.fromLTRB(
-                        16,
+                        isTablet ? 24 : 16,
                         0,
-                        16,
+                        isTablet ? 24 : 16,
                         16 + math.max(0.0, bottomInset),
                       ),
                       children: [
@@ -1434,7 +1708,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               Expanded(
                 child: segment(
                   icon: Icons.nfc_rounded,
-                  text: 'NFC',
+                  text: 'JNT Tap',
                   alignment: Alignment.center,
                 ),
               ),
@@ -1548,7 +1822,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,
@@ -1593,45 +1867,43 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   Widget _shippingLabelSection() {
+    return _isRespectiveShippingMode
+        ? _groupShippingLabelSection()
+        : _singleShippingLabelSection();
+  }
+
+  Widget _shippingActionButton({
+    required String label,
+    required String hint,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      hint: hint,
+      onTap: onPressed,
+      child: ExcludeSemantics(
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            backgroundColor: AppColors.blackCat,
+            foregroundColor: AppColors.snow,
+            side: const BorderSide(color: AppColors.blackCat),
+            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          ),
+          onPressed: onPressed,
+          icon: Icon(icon, size: 16),
+          label: Text(label),
+        ),
+      ),
+    );
+  }
+
+  Widget _singleShippingLabelSection() {
     final clientName = _firstNameOnly(widget.request.clientName);
     final cityState = widget.request.clientLocation.trim().isEmpty
         ? 'Not provided'
         : widget.request.clientLocation.trim();
-    final carrier = _shippingCarrierValue.trim().isEmpty
-        ? 'Not provided'
-        : _shippingCarrierValue.trim();
-    final tracking = _shippingTrackingValue.trim().isEmpty
-        ? 'Auto-filled on label'
-        : _shippingTrackingValue.trim();
-
-    Widget shippingAction({
-      required String label,
-      required String hint,
-      required IconData icon,
-      required VoidCallback onPressed,
-    }) {
-      return Semantics(
-        button: true,
-        label: label,
-        hint: hint,
-        onTap: onPressed,
-        child: ExcludeSemantics(
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              backgroundColor: AppColors.blackCat,
-              foregroundColor: AppColors.snow,
-              side: const BorderSide(color: AppColors.blackCat),
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-            onPressed: onPressed,
-            icon: Icon(icon, size: 16),
-            label: Text(label),
-          ),
-        ),
-      );
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1659,9 +1931,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
         if (_isShippingLabelReady) ...[
           _kv('Client', clientName),
           _kv('City/State', cityState == 'Not provided' ? '-' : cityState),
-          _kv('Carrier', carrier),
-          _kv('Tracking', tracking),
-        ] else
+        ] else ...[
           Semantics(
             container: true,
             label:
@@ -1677,25 +1947,38 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
               ),
             ),
           ),
+          const SizedBox(height: 10),
+          _shippingActionButton(
+            label: kShippingLiveEnabled
+                ? 'Get Shipping Label'
+                : 'Get Shipping Label (Simulated)',
+            hint:
+                'Double tap to generate a shipping label and tracking number for this order',
+            icon: Icons.local_shipping_rounded,
+            onPressed: _generatingShippingLabel
+                ? () {}
+                : () => unawaited(_getShippingLabel()),
+          ),
+        ],
         if (_isShippingLabelReady) ...[
           const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              shippingAction(
+              _shippingActionButton(
                 label: 'Download Label',
                 hint: 'Double tap to open the shipping label for download',
                 icon: Icons.download_rounded,
                 onPressed: () => _openLabelPreview(_shippingPdfValue),
               ),
-              shippingAction(
+              _shippingActionButton(
                 label: 'Print Label',
                 hint: 'Double tap to open the shipping label for printing',
                 icon: Icons.print_rounded,
                 onPressed: () => _openLabelPreview(_shippingPdfValue),
               ),
-              shippingAction(
+              _shippingActionButton(
                 label: 'QR Code',
                 hint:
                     'Double tap to show the shipping QR code for scan and print drop-off',
@@ -1722,6 +2005,163 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Group orders shipping to each member individually get one label per
+  /// recipient instead of the single Shipping Label block above -- each
+  /// recipient has their own address, so their own carrier/tracking/QR.
+  Widget _groupShippingLabelSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          header: true,
+          label: 'Shipping Labels',
+          onDidGainAccessibilityFocus: _handleTrackingRefocusTrapFocused,
+          child: const ExcludeSemantics(
+            child: Text(
+              'Shipping Labels',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final recipient in _shipmentRecipients)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _recipientLabelCard(recipient),
+          ),
+      ],
+    );
+  }
+
+  Widget _recipientLabelCard(_ShipmentRecipient recipient) {
+    final ready = _recipientLabelReady(recipient.key);
+    final generating = _generatingShippingLabelFor.contains(recipient.key);
+
+    return Container(
+      key: ValueKey('recipientLabelCard-${recipient.key}'),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            color: AppColors.blackCat.withValues(alpha: 0.04),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    recipient.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ),
+                Text(
+                  recipient.tag,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: AppColors.blackCat.withValues(alpha: 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Text(
+              recipient.hasAddress
+                  ? recipient.addressLabel
+                  : 'No shipping address on file',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: recipient.hasAddress
+                    ? FontWeight.w400
+                    : FontWeight.w700,
+                color: recipient.hasAddress
+                    ? AppColors.blackCat.withValues(alpha: 0.60)
+                    : const Color(0xFFA64B3C),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (ready) ...[
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _shippingActionButton(
+                        label: 'Download Label',
+                        hint:
+                            'Double tap to open ${recipient.name}\'s shipping label for download',
+                        icon: Icons.download_rounded,
+                        onPressed: () =>
+                            unawaited(_openLabelPreviewForRecipient(recipient)),
+                      ),
+                      _shippingActionButton(
+                        label: 'Print Label',
+                        hint:
+                            'Double tap to open ${recipient.name}\'s shipping label for printing',
+                        icon: Icons.print_rounded,
+                        onPressed: () =>
+                            unawaited(_openLabelPreviewForRecipient(recipient)),
+                      ),
+                      _shippingActionButton(
+                        label: 'QR Code',
+                        hint:
+                            'Double tap to show ${recipient.name}\'s shipping QR code for scan and print drop-off',
+                        icon: Icons.qr_code_2_rounded,
+                        onPressed: () =>
+                            unawaited(_openQrDialogForRecipient(recipient)),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  Text(
+                    'Shipping label is being prepared. Download, print, and QR code options will be available when the label is ready.',
+                    style: TextStyle(
+                      color: AppColors.blackCat.withValues(alpha: 0.68),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _shippingActionButton(
+                    label: kShippingLiveEnabled
+                        ? 'Get Shipping Label'
+                        : 'Get Shipping Label (Simulated)',
+                    hint:
+                        'Double tap to generate a shipping label and tracking number for ${recipient.name}',
+                    icon: Icons.local_shipping_rounded,
+                    onPressed: generating
+                        ? () {}
+                        : () => unawaited(
+                            _getShippingLabelForRecipient(recipient),
+                          ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

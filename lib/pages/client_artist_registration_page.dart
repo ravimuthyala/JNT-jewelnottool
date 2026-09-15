@@ -17,6 +17,7 @@ import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
+import '../utlis/responsive_layout.dart';
 import '../constants/currency_options.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
@@ -25,6 +26,7 @@ import '../widgets/full_hand_measurement_flow.dart';
 import '../widgets/registration_date_of_birth_picker.dart';
 import '../widgets/nail_photo_consent_dialog.dart';
 import '../widgets/communication_preference_section.dart';
+import '../widgets/accessible_date_grid.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
 import '../models/client_profile_models.dart';
@@ -33,7 +35,7 @@ import '../models/client_profile_models.dart';
 import '../widgets/direct_request_year_calendar.dart';
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
-import 'login_page.dart';
+import 'register_page.dart' show showRegisterModal;
 import 'client_artist_home_page.dart';
 import 'artist_checkout_page_modal_edit.dart';
 
@@ -227,8 +229,13 @@ class _ClientArtistRegistrationPageState
   // -----------------------
   // Shared Basic Profile (no duplicates)
   // -----------------------
-  final _fullNameOrStudioCtrl = TextEditingController();
-  final _displayNameCtrl = TextEditingController(); // needed for Artist
+  // Full Name and Studio Name are now separate fields (and separate DB
+  // columns) -- previously combined into one "Full Name / Studio Name"
+  // input. _displayNameCtrl (the old, permanently-empty Display Name
+  // placeholder kept only for its payload fallback wiring) is gone now
+  // that _fullNameCtrl is a genuine, directly-populated field.
+  final _fullNameCtrl = TextEditingController();
+  final _studioNameCtrl = TextEditingController();
   final _languageSpokenCtrl = TextEditingController();
   String? _currency = 'US Dollar (\$)';
   final _bioCtrl = TextEditingController();
@@ -1044,6 +1051,9 @@ class _ClientArtistRegistrationPageState
     final artistServices = _services.toList();
     final blockedDates = _blockedDates.map((d) => d.toIso8601String()).toList();
     final payout = _normalizedArtistPayout();
+    final fullName = _fullNameCtrl.text.trim();
+    final studioName = _studioNameCtrl.text.trim();
+    final nameOrStudio = fullName.isNotEmpty ? fullName : studioName;
 
     return {
       'uid': uid,
@@ -1051,8 +1061,9 @@ class _ClientArtistRegistrationPageState
       'accountType': 'client+artist',
       'roles': {'client': true, 'artist': true, 'company': false},
       // Panel-friendly top-level columns
-      'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-      'panel_displayName': _displayNameCtrl.text.trim(),
+      'panel_nameOrStudio': nameOrStudio,
+      'panel_fullName': fullName,
+      'panel_displayName': fullName,
       'panel_languageSpoken': _languageSpokenCtrl.text.trim(),
       'panel_currency': (_currency ?? '').trim(),
       'panel_phone': _fullPhone,
@@ -1129,11 +1140,11 @@ class _ClientArtistRegistrationPageState
         },
       },
       'profile': {
-        'name': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
-        'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-        'displayName': _displayNameCtrl.text.trim(),
+        'name': nameOrStudio,
+        'fullName': fullName,
+        'studioName': studioName,
+        'nameOrStudio': nameOrStudio,
+        'displayName': fullName,
         'dateOfBirth': _dateOfBirth?.toIso8601String(),
         'consentToStoreNailImages': _consentToStoreNailImages,
         'consentToStoreAndPublishPortfolio': _consentToStoreAndPublishPortfolio,
@@ -1279,9 +1290,9 @@ class _ClientArtistRegistrationPageState
   ClientProfileDraft _buildClientProfileDraft({String profilePhotoUrl = ''}) {
     return ClientProfileDraft(
       basic: BasicInfo(
-        name: _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
+        name: _fullNameCtrl.text.trim().isNotEmpty
+            ? _fullNameCtrl.text.trim()
+            : _studioNameCtrl.text.trim(),
         email: _emailCtrl.text.trim().toLowerCase(),
         phone: _fullPhone,
         profileImageUrl: profilePhotoUrl.trim(),
@@ -1758,9 +1769,15 @@ class _ClientArtistRegistrationPageState
                   onTap: openPicker,
                   borderRadius: BorderRadius.zero,
                   child: InputDecorator(
+                    // hintText intentionally left empty here -- the Text
+                    // child below already renders the hint (or the
+                    // selected value) itself. Passing `hint` into _dec()
+                    // as well made InputDecorator render its own hint text
+                    // on top of that child whenever the field was empty,
+                    // producing doubled/overlapping "Select state" text.
                     decoration: _dec(
                       visualLabel,
-                      hint,
+                      '',
                       suffixIcon: const Icon(
                         Icons.arrow_drop_down_rounded,
                         size: 24,
@@ -1821,48 +1838,31 @@ class _ClientArtistRegistrationPageState
   Future<void> _showAgeIneligibleDialog() async {
     await showRegistrationAgeIneligibleDialog(context: context);
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginDialog()),
-      (route) => false,
-    );
+    // Same "close registration, return to Home, reopen the role picker"
+    // sequence as this page's own X button -- an ineligible DOB means this
+    // signup attempt can't continue, so send them back to the start rather
+    // than leaving them stuck here or bouncing to a login screen that
+    // doesn't apply (they don't have an account).
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final currentRoute = ModalRoute.of(context);
+    rootNavigator.pop();
+    if (currentRoute != null) {
+      await currentRoute.completed;
+    }
+    if (!rootNavigator.mounted) return;
+    await showRegisterModal(rootNavigator.context);
   }
 
   Future<void> _pickDateOfBirth() async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    // Use Flutter's picker directly on this page. The shared registration DOB
-    // picker currently opens its calendar view at January 1900 even when an
-    // initialDate is supplied. Starting here guarantees that an empty DOB
-    // opens on the actual current month/date.
-    final selected = await showDatePicker(
+    final selected = await showAccessibleDatePickerDialog(
       context: context,
-      helpText: 'Select Date of Birth',
-      initialDate: _dateOfBirth ?? today,
+      fieldLabel: 'Date of Birth',
       firstDate: DateTime(1900, 1, 1),
       lastDate: today,
-      currentDate: today,
-      initialEntryMode: DatePickerEntryMode.calendarOnly,
-      builder: (pickerContext, child) {
-        final baseTheme = Theme.of(pickerContext);
-        return Theme(
-          data: baseTheme.copyWith(
-            colorScheme: baseTheme.colorScheme.copyWith(
-              primary: AppColors.blackCat,
-              onPrimary: AppColors.snow,
-              surface: AppColors.snow,
-              onSurface: AppColors.blackCat,
-            ),
-            datePickerTheme: baseTheme.datePickerTheme.copyWith(
-              backgroundColor: AppColors.snow,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
-            ),
-          ),
-          child: child!,
-        );
-      },
+      initialSelectedDate: _dateOfBirth ?? today,
     );
 
     if (selected == null || !mounted) return;
@@ -1880,11 +1880,20 @@ class _ClientArtistRegistrationPageState
   }
 
   // Lets a sighted or screen-reader user type the date directly instead of
-  // requiring the calendar picker. Age-eligibility is re-checked at submit
-  // time regardless of entry method, so this only needs to track the parsed
-  // value -- not repeat that check on every keystroke.
+  // requiring the calendar picker. Checks eligibility as soon as a complete,
+  // parseable date is typed -- matches the picker path (_onDateOfBirthPicked)
+  // so the ineligibility dialog fires right at the DOB field itself, not
+  // only later at a step/submit button. tryParseMmDdYyyy returns null for
+  // an incomplete in-progress string, so this doesn't fire on every
+  // keystroke, only once the date is actually complete.
   void _onDateOfBirthTyped(String value) {
-    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
+    final parsed = tryParseMmDdYyyy(value);
+    setState(() => _dateOfBirth = parsed);
+    if (parsed != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(parsed) &&
+        mounted) {
+      _showAgeIneligibleDialog();
+    }
   }
 
   void _onEmailChanged(String value) {
@@ -2707,7 +2716,7 @@ class _ClientArtistRegistrationPageState
     // Keep the screen reader in the Portfolio section after the platform
     // image picker closes. If more images may be added, return to the same
     // Add control the user activated. At the 10-photo limit that control is
-    // no longer rendered, so return to the Upload inspiration photos heading.
+    // no longer rendered, so return to the Upload Previous Portfolio Photos heading.
     final canAddMore = _portfolioImages.length < _maxPortfolioImages;
     final targetContext = canAddMore
         ? _addPortfolioImageKey.currentContext
@@ -2755,7 +2764,7 @@ class _ClientArtistRegistrationPageState
   Future<void> _pickPortfolioImages() async {
     final remainingSlots = _maxPortfolioImages - _portfolioImages.length;
     if (remainingSlots <= 0) {
-      const message = 'You can upload up to 10 inspiration photos.';
+      const message = 'You can upload up to 10 portfolio photos.';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(message)),
       );
@@ -2763,24 +2772,23 @@ class _ClientArtistRegistrationPageState
       return;
     }
 
-    // Cap dimensions at the OS picker level: without this, selecting
-    // several full-resolution camera photos (each potentially 10+ MB, tens
-    // of megapixels) at once means every one of them gets fully decoded to
-    // an uncompressed pixel buffer later in _optimizePortfolioBytes, one
-    // after another in a tight synchronous loop -- easily enough peak
-    // memory to get the app killed by the OS with no Dart-level exception
-    // (seen as "Lost connection to device" with no stack trace).
-    final files = await _picker.pickMultiImage(
-      imageQuality: 85,
-      maxWidth: 2000,
-      maxHeight: 2000,
-    );
+    // Deliberately NOT passing imageQuality/maxWidth/maxHeight here.
+    // image_picker's native multi-select compression path has a known bug
+    // (Android especially) where every selected image gets compressed to
+    // the SAME temp filename, so every returned XFile ends up pointing at
+    // the last-written file -- the user picks 5 distinct photos and gets 5
+    // copies of one. Each file is still processed and discarded one at a
+    // time below via _optimizePortfolioBytes (only one decoded bitmap
+    // alive at once, not all of them accumulated), which is the actual
+    // memory-safety mechanism -- the native params were redundant with it
+    // and are what caused the duplication.
+    final files = await _picker.pickMultiImage();
 
     if (!mounted) return;
 
     if (files.isEmpty) {
       await _restorePortfolioPickerFocus(
-        announcement: 'No inspiration photos added.',
+        announcement: 'No portfolio photos added.',
       );
       return;
     }
@@ -2802,7 +2810,7 @@ class _ClientArtistRegistrationPageState
 
     if (bytesList.isEmpty) {
       await _restorePortfolioPickerFocus(
-        announcement: 'No inspiration photos added.',
+        announcement: 'No portfolio photos added.',
       );
       return;
     }
@@ -2812,12 +2820,12 @@ class _ClientArtistRegistrationPageState
     final addedCount = bytesList.length;
     final totalCount = _portfolioImages.length;
     final addedLabel =
-        '$addedCount inspiration ${addedCount == 1 ? 'photo' : 'photos'} added. '
+        '$addedCount portfolio ${addedCount == 1 ? 'photo' : 'photos'} added. '
         '$totalCount of $_maxPortfolioImages photos selected.';
 
     if (files.length > remainingSlots) {
       const limitMessage =
-          'Only 10 inspiration photos are allowed. Extra photos were not added.';
+          'Only 10 portfolio photos are allowed. Extra photos were not added.';
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(limitMessage)),
       );
@@ -2920,7 +2928,9 @@ class _ClientArtistRegistrationPageState
     }
 
     final checkoutInfo = ArtistCheckoutInfo(
-      artistName: _fullNameOrStudioCtrl.text.trim(),
+      artistName: _fullNameCtrl.text.trim().isNotEmpty
+          ? _fullNameCtrl.text.trim()
+          : _studioNameCtrl.text.trim(),
       email: _emailCtrl.text.trim().toLowerCase(),
       phone: _fullPhone,
       city: _cityCtrl.text.trim(),
@@ -3641,10 +3651,11 @@ class _ClientArtistRegistrationPageState
 
   Map<String, dynamic> _criticalRegistrationPayload({required String uid}) {
     final payload = _buildCombinedFirestorePayload(uid: uid);
+    final fullName = _fullNameCtrl.text.trim();
+    final studioName = _studioNameCtrl.text.trim();
+    final nameOrStudio = fullName.isNotEmpty ? fullName : studioName;
     final basic = <String, dynamic>{
-      'name': _displayNameCtrl.text.trim().isNotEmpty
-          ? _displayNameCtrl.text.trim()
-          : _fullNameOrStudioCtrl.text.trim(),
+      'name': nameOrStudio,
       'email': _emailCtrl.text.trim().toLowerCase(),
       'phone': _fullPhone,
       'profileImageUrl': '',
@@ -3669,21 +3680,18 @@ class _ClientArtistRegistrationPageState
       'payout': payload['artist']['payout'],
       'agreements': payload['artist']['agreements'],
       'registration': payload['registration'],
-      'displayName': _displayNameCtrl.text.trim(),
-      'studioName': _fullNameOrStudioCtrl.text.trim(),
-      'name': _displayNameCtrl.text.trim().isNotEmpty
-          ? _displayNameCtrl.text.trim()
-          : _fullNameOrStudioCtrl.text.trim(),
-      'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-      'fullName': _displayNameCtrl.text.trim().isNotEmpty
-          ? _displayNameCtrl.text.trim()
-          : _fullNameOrStudioCtrl.text.trim(),
+      'displayName': fullName,
+      'studioName': studioName,
+      'name': nameOrStudio,
+      'nameOrStudio': nameOrStudio,
+      'fullName': fullName,
       'profileImageUrl': '',
       'profilePhotoUrl': '',
       'photoUrl': '',
       'avatarUrl': '',
-      'panel_displayName': _displayNameCtrl.text.trim(),
-      'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+      'panel_displayName': fullName,
+      'panel_fullName': fullName,
+      'panel_nameOrStudio': nameOrStudio,
       'panel_profileImageUrl': '',
       'updated_at': now,
     };
@@ -3696,9 +3704,9 @@ class _ClientArtistRegistrationPageState
     try {
       final payload = _buildCombinedFirestorePayload(uid: _registrationDraftId);
       final basic = <String, dynamic>{
-        'name': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
+        'name': _fullNameCtrl.text.trim().isNotEmpty
+            ? _fullNameCtrl.text.trim()
+            : _studioNameCtrl.text.trim(),
         'email': email,
         'phone': _fullPhone,
         'profileImageUrl': '',
@@ -3848,6 +3856,21 @@ class _ClientArtistRegistrationPageState
       return false;
     }
 
+    // Age-eligibility was previously only enforced on the final,
+    // bundle-purchase-gated "Create account" button (_continue), meaning a
+    // user could tap "Next" through every intermediate step with an
+    // under-14 DOB and never see this dialog -- especially since the last
+    // button is disabled (not wired to _continue at all) until
+    // _bundlePurchased && _canStartCheckout, so the check could be
+    // unreachable in practice. Enforce it here too, right as they try to
+    // leave the DOB step, matching every other registration flow.
+    if (_registrationStep == 0 &&
+        _dateOfBirth != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(_dateOfBirth!)) {
+      await _showAgeIneligibleDialog();
+      return false;
+    }
+
     if (_registrationStep == 0 && _isUnitedStates) {
       try {
         final addressValidation =
@@ -3956,10 +3979,11 @@ class _ClientArtistRegistrationPageState
         profilePhotoUrl: profilePhotoUrl.trim(),
         portfolioImageUrls: portfolioImageUrls,
       );
+      final fullName = _fullNameCtrl.text.trim();
+      final studioName = _studioNameCtrl.text.trim();
+      final nameOrStudio = fullName.isNotEmpty ? fullName : studioName;
       final basic = <String, dynamic>{
-        'name': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
+        'name': nameOrStudio,
         'email': _emailCtrl.text.trim().toLowerCase(),
         'phone': _fullPhone,
         'profileImageUrl': profilePhotoUrl.trim(),
@@ -3974,21 +3998,18 @@ class _ClientArtistRegistrationPageState
         'id': uid,
         'email': _emailCtrl.text.trim().toLowerCase(),
         'account_type': 'client_artist',
-        'displayName': _displayNameCtrl.text.trim(),
-        'studioName': _fullNameOrStudioCtrl.text.trim(),
-        'name': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
-        'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-        'fullName': _displayNameCtrl.text.trim().isNotEmpty
-            ? _displayNameCtrl.text.trim()
-            : _fullNameOrStudioCtrl.text.trim(),
+        'displayName': fullName,
+        'studioName': studioName,
+        'name': nameOrStudio,
+        'nameOrStudio': nameOrStudio,
+        'fullName': fullName,
         'profileImageUrl': profilePhotoUrl.trim(),
         'profilePhotoUrl': profilePhotoUrl.trim(),
         'photoUrl': profilePhotoUrl.trim(),
         'avatarUrl': profilePhotoUrl.trim(),
-        'panel_displayName': _displayNameCtrl.text.trim(),
-        'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+        'panel_displayName': fullName,
+        'panel_fullName': fullName,
+          'panel_nameOrStudio': nameOrStudio,
         'panel_profileImageUrl': profilePhotoUrl.trim(),
         'profile': payload['profile'],
         'basic': basic,
@@ -4036,21 +4057,18 @@ class _ClientArtistRegistrationPageState
           'id': uid,
           'email': _emailCtrl.text.trim().toLowerCase(),
           'account_type': 'client_artist',
-          'displayName': _displayNameCtrl.text.trim(),
-          'studioName': _fullNameOrStudioCtrl.text.trim(),
-          'name': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
-          'nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
-          'fullName': _displayNameCtrl.text.trim().isNotEmpty
-              ? _displayNameCtrl.text.trim()
-              : _fullNameOrStudioCtrl.text.trim(),
+          'displayName': fullName,
+          'studioName': studioName,
+          'name': nameOrStudio,
+          'nameOrStudio': nameOrStudio,
+          'fullName': fullName,
           'profileImageUrl': profilePhotoUrl.trim(),
           'profilePhotoUrl': profilePhotoUrl.trim(),
           'photoUrl': profilePhotoUrl.trim(),
           'avatarUrl': profilePhotoUrl.trim(),
-          'panel_displayName': _displayNameCtrl.text.trim(),
-          'panel_nameOrStudio': _fullNameOrStudioCtrl.text.trim(),
+          'panel_displayName': fullName,
+          'panel_fullName': fullName,
+              'panel_nameOrStudio': nameOrStudio,
           'panel_profileImageUrl': profilePhotoUrl.trim(),
           'profile': payload['profile'],
           'services': payload['artist']['services'],
@@ -4244,8 +4262,8 @@ class _ClientArtistRegistrationPageState
     _confirmCtrl.dispose();
     _phoneCtrl.dispose();
 
-    _fullNameOrStudioCtrl.dispose();
-    _displayNameCtrl.dispose();
+    _fullNameCtrl.dispose();
+    _studioNameCtrl.dispose();
     _languageSpokenCtrl.dispose();
     _bioCtrl.dispose();
     _instagramCtrl.dispose();
@@ -4302,28 +4320,28 @@ class _ClientArtistRegistrationPageState
             _profilePicTile(),
             const SizedBox(height: 16),
 
-            _FieldLabel.required('Full Name / Studio Name'),
+            _FieldLabel.required('Full Name'),
             const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
-                controller: _fullNameOrStudioCtrl,
+                controller: _fullNameCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Full Name / Studio Name *', 'Enter Name'),
-                validator: (v) => _requiredValidator(v, 'Name'),
+                decoration: _dec('Full Name *', 'Enter Full Name'),
+                validator: (v) => _requiredValidator(v, 'Full Name'),
               ),
             ),
             const SizedBox(height: 16),
 
-            _FieldLabel.required('Display Name'),
+            _FieldLabel.required('Studio Name'),
             const SizedBox(height: 6),
             _req(
               true,
               TextFormField(
-                controller: _displayNameCtrl,
+                controller: _studioNameCtrl,
                 style: const TextStyle(fontSize: _inputFs),
-                decoration: _dec('Display Name *', 'Enter Display Name'),
-                validator: (v) => _requiredValidator(v, 'Display Name'),
+                decoration: _dec('Studio Name *', 'Enter Studio Name'),
+                validator: (v) => _requiredValidator(v, 'Studio Name'),
               ),
             ),
             const SizedBox(height: 16),
@@ -4958,7 +4976,7 @@ class _ClientArtistRegistrationPageState
       builder: (context) => _sectionCard(
         title: 'Portfolio',
         subtitle:
-            'Upload inspiration photos. (${_portfolioImages.length}/$_maxPortfolioImages photo(s))',
+            'Upload Previous Portfolio Photos. (${_portfolioImages.length}/$_maxPortfolioImages photo(s))',
         titleSemanticsKey: _portfolioHeadingKey,
         titleFocusNode: _portfolioHeadingFocusNode,
         gradient: const LinearGradient(colors: [_snow, _snow]),
@@ -4974,13 +4992,13 @@ class _ClientArtistRegistrationPageState
               container: true,
               explicitChildNodes: false,
               header: true,
-              label: 'Upload inspiration photos',
+              label: 'Upload Previous Portfolio Photos',
               child: ExcludeSemantics(
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
-                        'Upload inspiration photos',
+                        'Upload Previous Portfolio Photos',
                         style: TextStyle(
                           fontSize: _inputFs,
                           fontWeight: FontWeight.w700,
@@ -5068,7 +5086,7 @@ class _ClientArtistRegistrationPageState
                       label: 'Add portfolio image',
                       value:
                           '${_portfolioImages.length} of $_maxPortfolioImages photos selected',
-                      hint: 'Double tap to select inspiration photos',
+                      hint: 'Double tap to select portfolio photos',
                       onTap: _pickPortfolioImages,
                       child: ExcludeSemantics(
                         child: InkWell(
@@ -5255,11 +5273,11 @@ class _ClientArtistRegistrationPageState
               inactiveTrackColor: _blackCat.withValues(alpha: 0.25),
               onChanged: (v) => setState(() => _nfcRequestEnabled = v),
               title: const Text(
-                'Accepts NFC',
+                'Accepts JNT Tap',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
-                'Allow clients to send NFC upgrade requests.',
+                'Allow clients to send JNT Tap upgrade requests.',
                 style: TextStyle(
                   fontSize: _smallFs,
                   color: AppColors.blackCat.withValues(alpha: 0.55),
@@ -6654,6 +6672,7 @@ class _ClientArtistRegistrationPageState
   Widget build(BuildContext context) {
     final dropdownTextColor = _blackCat;
     final dropdownBackground = _snow;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Theme(
       data: Theme.of(context).copyWith(
@@ -6672,35 +6691,63 @@ class _ClientArtistRegistrationPageState
         child: Scaffold(
           backgroundColor: AppColors.snow,
           appBar: JntModalAppBar(
-            onClose: () => Navigator.of(
-              context,
-              rootNavigator: true,
-            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            onClose: () async {
+              // Return to the existing HomePage underneath this route. A
+              // replacement Home route can dispose later and reset the
+              // tablet layout after the Create Account modal is visible.
+              final rootNavigator = Navigator.of(
+                context,
+                rootNavigator: true,
+              );
+              final currentRoute = ModalRoute.of(context);
+              rootNavigator.pop();
+
+              // Wait until Client-Artist Registration is completely removed
+              // before opening the same Create Account modal used by Login.
+              if (currentRoute != null) {
+                await currentRoute.completed;
+              }
+              if (!rootNavigator.mounted) return;
+              await showRegisterModal(rootNavigator.context);
+            },
             closeTooltip: 'Close client-artist registration',
             closeIcon: const Icon(Icons.close),
           ),
           body: SafeArea(
-            child: Form(
-              key: _formKey,
-              autovalidateMode: _validationTriggeredStep == _registrationStep
-                  ? AutovalidateMode.always
-                  : AutovalidateMode.disabled,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                child: Column(
-                  children: [
-                    _registrationProgressTabs(),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        controller: _registrationScrollController,
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Column(
-                          children: _currentRegistrationStepWidgets(),
-                        ),
-                      ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isTablet ? 1000 : double.infinity,
+                ),
+                child: Form(
+                  key: _formKey,
+                  autovalidateMode:
+                      _validationTriggeredStep == _registrationStep
+                      ? AutovalidateMode.always
+                      : AutovalidateMode.disabled,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      isTablet ? 24 : 16,
+                      10,
+                      isTablet ? 24 : 16,
+                      8,
                     ),
-                    _wizardNavButtons(),
-                  ],
+                    child: Column(
+                      children: [
+                        _registrationProgressTabs(),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            controller: _registrationScrollController,
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Column(
+                              children: _currentRegistrationStepWidgets(),
+                            ),
+                          ),
+                        ),
+                        _wizardNavButtons(),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),

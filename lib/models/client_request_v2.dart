@@ -136,6 +136,12 @@ class ClientRequestV2 {
   final String title;
   final String subtitle;
   final DateTime neededBy;
+  // The earlier deadline (before neededBy) by which a client must accept a
+  // brand request -- null for client/client-artist requests, which have no
+  // separate client-acceptance stage. Read by the expiry sweeps to decide
+  // whether a brand request without any client acceptance yet has timed
+  // out at this date, versus one with a client aboard running to neededBy.
+  final DateTime? requestAcceptBy;
   final DateTime? submittedAt;
   final int budgetMin;
   final int budgetMax;
@@ -240,6 +246,7 @@ class ClientRequestV2 {
     required this.title,
     required this.subtitle,
     required this.neededBy,
+    this.requestAcceptBy,
     this.submittedAt,
     required this.budgetMin,
     required this.budgetMax,
@@ -417,6 +424,7 @@ class ClientRequestV2 {
       title: title,
       subtitle: subtitle,
       neededBy: neededBy,
+      requestAcceptBy: requestAcceptBy,
       submittedAt: submittedAt ?? this.submittedAt,
       budgetMin: budgetMin ?? this.budgetMin,
       budgetMax: budgetMax ?? this.budgetMax,

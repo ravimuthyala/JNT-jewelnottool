@@ -10,6 +10,7 @@ import 'edit_company_business_info_popup.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/searchable_dropdown_field.dart';
+import '../utlis/responsive_layout.dart';
 import 'edit_shipping_address_page.dart' show usStates, countries;
 
 class CompanyProfilePage extends StatefulWidget {
@@ -662,6 +663,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       context: context,
       isScrollControlled: true,
       requestFocus: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyBusinessInfoPopup(initial: _businessInfo),
     );
@@ -687,6 +692,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       context: context,
       isScrollControlled: true,
       requestFocus: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyBillingPopup(initial: _billingInfo),
     );
@@ -833,6 +842,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       context: context,
       isScrollControlled: true,
       requestFocus: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditCompanyAddressesPopup(initial: _addressInfo),
     );
@@ -902,6 +915,10 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       context: context,
       isScrollControlled: true,
       requestFocus: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => CompanyCommunicationPreferencesPopup(
         initial: _communicationPreferences,
@@ -1123,6 +1140,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final companyName = _businessInfo.companyName.trim().isNotEmpty
         ? _businessInfo.companyName.trim()
         : widget.companyName;
@@ -1156,9 +1174,19 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
           ),
           onLogout: widget.onLogout,
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-          children: [
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 1200 : double.infinity,
+            ),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                10,
+                isTablet ? 24 : 16,
+                18,
+              ),
+              children: [
             const SizedBox(height: 6),
 
             // Avatar moved into body (not header)
@@ -1292,7 +1320,9 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
             const SizedBox(height: 22),
 
             _TextDangerButton(text: 'Log out', onTap: widget.onLogout),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

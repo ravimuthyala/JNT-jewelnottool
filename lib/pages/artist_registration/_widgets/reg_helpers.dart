@@ -316,6 +316,16 @@ class RegTypeAheadField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FormField<String>(
+      // Include the externally selected value in the key so values populated
+      // by address lookup/autofill become the FormField's real initial value
+      // instead of leaving the field stuck empty -- FormField/Autocomplete's
+      // own `initialValue` params are only ever applied once, at first
+      // build, and don't re-sync when this widget rebuilds with a new
+      // `selectedValue` from outside. Matches the same fix already applied
+      // in client_artist_registration_page.dart's equivalent picker.
+      key: ValueKey<String>(
+        'registration-choice-$label-${(selectedValue ?? '').trim()}',
+      ),
       initialValue: selectedValue,
       validator: validator,
       builder: (field) {

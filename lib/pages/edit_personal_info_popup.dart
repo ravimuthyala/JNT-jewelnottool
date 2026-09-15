@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
 import '../utils/registration_input_utils.dart';
@@ -216,6 +217,7 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Semantics(
       scopesRoute: true,
@@ -233,7 +235,12 @@ class _EditPersonalInfoPopupState extends State<EditPersonalInfoPopup> {
           child: SafeArea(
             top: false,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                14,
+                isTablet ? 24 : 16,
+                18,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

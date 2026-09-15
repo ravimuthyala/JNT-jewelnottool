@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_modal_app_bar.dart';
@@ -359,7 +360,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.9,
         child: ArtistPayoutSettingsPage(
@@ -543,7 +548,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     final result = await showModalBottomSheet<PersonalInfoEditResult>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       builder: (_) => EditPersonalInfoPopup(profile: _profile),
     );
 
@@ -668,7 +677,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     final updatedAddress = await showModalBottomSheet<AddressInfo>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.blackCat,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       builder: (_) => EditShippingAddressPopup(initial: _profile.address),
     );
 
@@ -681,7 +694,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     final updatedPayment = await showModalBottomSheet<PaymentInfo>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.blackCat,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       builder: (_) => EditPaymentInfoPage(initial: _profile.payment),
     );
 
@@ -735,6 +752,9 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: AppColors.blackCat,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       builder: (_) => EditMeasurementsPopup(initial: _profile.nail),
     );
 
@@ -797,7 +817,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         await showModalBottomSheet<CommunicationPreferences>(
           context: context,
           isScrollControlled: true,
+          useSafeArea: true,
           backgroundColor: AppColors.blackCat,
+          constraints: isTabletSize(MediaQuery.sizeOf(context))
+              ? const BoxConstraints(maxWidth: 900)
+              : null,
           builder: (_) => _CommunicationPreferencePopup(
             initialValue: _communicationPreferences,
           ),
@@ -920,7 +944,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
         ),
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+          padding: responsivePagePadding(
+            context,
+            phone: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+            maxContentWidth: 900,
+          ),
           children: [
             Stack(
               children: [

@@ -3,6 +3,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/responsive_field_row.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -319,22 +320,32 @@ class Step4CredentialsState extends State<Step4Credentials> {
                   const SizedBox(height: kFieldGap),
                 ],
                 if (_paymentMethod == 'Apple Pay') ...[
-                  TextField(
-                    controller: _applePayPaymentNameCtrl,
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec('Full Name *', 'Name on Apple Pay'),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _applePayPaymentPhoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(10),
-                      _UsPhoneFmt(),
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      TextField(
+                        controller: _applePayPaymentNameCtrl,
+                        style: const TextStyle(fontSize: kInputFs),
+                        decoration: regDec(
+                          'Full Name *',
+                          'Name on Apple Pay',
+                        ),
+                      ),
+                      TextField(
+                        controller: _applePayPaymentPhoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                          _UsPhoneFmt(),
+                        ],
+                        style: const TextStyle(fontSize: kInputFs),
+                        decoration: regDec(
+                          'Phone Number *',
+                          'Apple Pay phone',
+                        ),
+                      ),
                     ],
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec('Phone Number *', 'Apple Pay phone'),
                   ),
                   const SizedBox(height: kFieldGap),
                   TextField(
@@ -520,92 +531,120 @@ class Step4CredentialsState extends State<Step4Credentials> {
                 const SizedBox(height: kFieldGap),
                 if (_payoutMethod == PayoutMethod.paypal ||
                     _payoutMethod == PayoutMethod.venmo) ...[
-                  TextField(
-                    controller: _legalNameCtrl,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Legal Name *', 'Legal Name'),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _payoutEmailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec(
-                      _payoutMethod == PayoutMethod.venmo
-                          ? 'Venmo Email *'
-                          : 'PayPal Email *',
-                      'Email',
-                    ),
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      TextField(
+                        controller: _legalNameCtrl,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec('Legal Name *', 'Legal Name'),
+                      ),
+                      TextField(
+                        controller: _payoutEmailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec(
+                          _payoutMethod == PayoutMethod.venmo
+                              ? 'Venmo Email *'
+                              : 'PayPal Email *',
+                          'Email',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (_payoutMethod == PayoutMethod.bankTransfer) ...[
-                  TextField(
-                    controller: _legalNameCtrl,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Legal Name *', 'Legal Name'),
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      TextField(
+                        controller: _legalNameCtrl,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec('Legal Name *', 'Legal Name'),
+                      ),
+                      TextField(
+                        controller: _bankNameCtrl,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec('Bank Name *', 'Bank name'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _bankNameCtrl,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Bank Name *', 'Bank name'),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _routingCtrl,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Routing Number *', 'Routing number'),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _accountNumberCtrl,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Account Number *', 'Account number'),
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      TextField(
+                        controller: _routingCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec(
+                          'Routing Number *',
+                          'Routing number',
+                        ),
+                      ),
+                      TextField(
+                        controller: _accountNumberCtrl,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec(
+                          'Account Number *',
+                          'Account number',
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (_payoutMethod == PayoutMethod.applePay) ...[
-                  TextField(
-                    controller: _applePayNameCtrl,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Full Name *', 'Name on Apple Pay'),
-                  ),
-                  const SizedBox(height: kFieldGap),
-                  TextField(
-                    controller: _applePayPhoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(10),
-                      _UsPhoneFmt(),
+                  ResponsiveFieldRow(
+                    gap: kFieldGap,
+                    fields: [
+                      TextField(
+                        controller: _applePayNameCtrl,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec(
+                          'Full Name *',
+                          'Name on Apple Pay',
+                        ),
+                      ),
+                      TextField(
+                        controller: _applePayPhoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                          _UsPhoneFmt(),
+                        ],
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.blackCat,
+                        ),
+                        decoration: regDec(
+                          'Phone Number *',
+                          'Apple Pay phone',
+                        ),
+                      ),
                     ],
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.blackCat,
-                    ),
-                    decoration: regDec('Phone Number *', 'Apple Pay phone'),
                   ),
                   const SizedBox(height: kFieldGap),
                   TextField(

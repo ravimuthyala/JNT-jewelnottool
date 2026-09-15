@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
+import '../utlis/responsive_layout.dart';
 
 class EditPaymentInfoPage extends StatefulWidget {
   const EditPaymentInfoPage({super.key, required this.initial});
@@ -90,6 +91,7 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -98,7 +100,12 @@ class _EditPaymentInfoPageState extends State<EditPaymentInfoPage> {
       child: Material(
       color: AppColors.snow,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        padding: EdgeInsets.fromLTRB(
+          isTablet ? 24 : 16,
+          16,
+          isTablet ? 24 : 16,
+          14,
+        ),
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,

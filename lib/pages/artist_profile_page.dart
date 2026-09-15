@@ -1530,13 +1530,16 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                   void Function(int completed, int total)? onProgress,
                 }) async {
                   final picker = ImagePicker();
-                  final picked =
-                      selectedFiles ??
-                      await picker.pickMultiImage(
-                        imageQuality: 78,
-                        maxWidth: _portfolioMaxEdge.toDouble(),
-                        maxHeight: _portfolioMaxEdge.toDouble(),
-                      );
+                  // Deliberately NOT passing imageQuality/maxWidth/maxHeight
+                  // here. image_picker's native multi-select compression
+                  // path has a known bug (Android especially) where every
+                  // selected image gets compressed to the SAME temp
+                  // filename, so every returned XFile ends up pointing at
+                  // the last-written file. prepareBytes() below already
+                  // does real per-file resize/re-encode, so the native
+                  // params were redundant with it and are what caused the
+                  // duplication.
+                  final picked = selectedFiles ?? await picker.pickMultiImage();
                   if (picked.isEmpty) return const <ArtistPortfolioItem>[];
 
                   final storage = SupabaseBootstrap.client.storage.from(
@@ -4444,12 +4447,15 @@ class _ArtistPortfolioModalState extends State<ArtistPortfolioModal> {
                                       ? null
                                       : () async {
                                           final picker = ImagePicker();
+                                          // Deliberately NOT passing
+                                          // imageQuality/maxWidth/maxHeight
+                                          // here -- see the matching comment
+                                          // on the other pickMultiImage call
+                                          // in this file (onUploadTap's
+                                          // prepareBytes does real per-file
+                                          // compression downstream).
                                           final picked = await picker
-                                              .pickMultiImage(
-                                                imageQuality: 78,
-                                                maxWidth: 1600,
-                                                maxHeight: 1600,
-                                              );
+                                              .pickMultiImage();
                                           if (picked.isEmpty) return;
                                           setState(() => _uploading = true);
                                           try {

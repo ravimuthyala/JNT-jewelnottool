@@ -378,8 +378,6 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   Future<void> _syncExpiredRequests(
     List<SubmittedClientRequestSummary> items,
   ) async {
-    const expirationReason =
-        'Request was not accepted by artist, and it is past due.';
     final now = DateTime.now();
     for (final req in items) {
       final raw = req.status.trim().toLowerCase();
@@ -396,11 +394,31 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final artistAccepted = req.acceptedByArtistEmail.trim().isNotEmpty;
       if (artistAccepted) continue;
       final due = req.needBy;
-      if (due == null) continue;
-      final pastDue = now.isAfter(
-        DateTime(due.year, due.month, due.day).add(const Duration(days: 1)),
-      );
-      if (!pastDue) continue;
+      final pastDue =
+          due != null &&
+          now.isAfter(
+            DateTime(
+              due.year,
+              due.month,
+              due.day,
+            ).add(const Duration(days: 1)),
+          );
+      // Before any client has accepted, the earlier accept-by date is the
+      // deadline; only once a client has does the request get the full
+      // runway to the need-by date for an artist to pick it up. The precise
+      // check (incl. group acceptance) happens below, once the current row
+      // is fetched -- this is just the cheap pre-filter.
+      final acceptBy = req.requestAcceptBy ?? due;
+      final pastAcceptBy =
+          acceptBy != null &&
+          now.isAfter(
+            DateTime(
+              acceptBy.year,
+              acceptBy.month,
+              acceptBy.day,
+            ).add(const Duration(days: 1)),
+          );
+      if (!pastAcceptBy) continue;
 
       try {
         final row = await _client
@@ -421,6 +439,20 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           current['acceptedByClientEmail'],
           req.acceptedByClientEmail,
         ]).toLowerCase();
+        final hasAnyClientAcceptance =
+            acceptedClientEmail.isNotEmpty ||
+            <Object?>[
+              current['acceptedGroupClientEmails'],
+              current['accepted_group_client_emails'],
+              payload['acceptedGroupClientEmails'],
+              details['acceptedGroupClientEmails'],
+            ].any((value) => value is List && value.isNotEmpty);
+        // At least one client is in -- the request now runs on the need-by
+        // date, waiting on an artist, not the accept-by date.
+        if (hasAnyClientAcceptance && !pastDue) continue;
+        final expirationReason = hasAnyClientAcceptance
+            ? 'Request was not accepted by artist, and it is past due.'
+            : 'Request was not accepted by any client, and it is past due.';
         final currentStatus = firstNonEmpty([
           current['status'],
           current['client_status'],
@@ -522,7 +554,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: const <String, dynamic>{'reason': expirationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
@@ -536,7 +568,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: const <String, dynamic>{'reason': expirationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
@@ -548,7 +580,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
             orderId: req.id,
             orderNumber: req.orderNumber,
             sourceCollection: collection,
-            extra: const <String, dynamic>{'reason': expirationReason},
+            extra: <String, dynamic>{'reason': expirationReason},
           );
         }
       } catch (_) {}

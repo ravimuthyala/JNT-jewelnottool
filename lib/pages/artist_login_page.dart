@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../services/auth_email_alias_service.dart';
 import 'artist_shell_page.dart';
+import 'login_page.dart' show isCurrentSessionAccountBlocked;
 import '../services/supabase_auth_service.dart';
 
 class ArtistLoginPage extends StatefulWidget {
@@ -82,6 +83,17 @@ class _ArtistLoginPageState extends State<ArtistLoginPage> {
           password: password,
         );
       }
+      if (!mounted) return;
+
+      if (await isCurrentSessionAccountBlocked()) {
+        await SupabaseAuthService.logout();
+        if (!mounted) return;
+        setState(
+          () => _error = 'Your account has been deactivated. Contact support.',
+        );
+        return;
+      }
+
       if (!mounted) return;
       Navigator.pushReplacement(
         context,

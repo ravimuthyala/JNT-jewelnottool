@@ -18,6 +18,7 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
+import '../utlis/responsive_layout.dart';
 
 import 'notifications_page.dart';
 import 'edit_personal_info_popup.dart';
@@ -1008,7 +1009,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Unable to update NFC request preference.'),
+          content: Text('Unable to update JNT Tap request preference.'),
         ),
       );
     } finally {
@@ -1024,6 +1025,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final result = await showModalBottomSheet<PersonalInfoEditResult>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditPersonalInfoPopup(profile: _profile),
     );
@@ -1069,6 +1074,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
@@ -1214,6 +1223,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final result = await showModalBottomSheet<PaymentInfo>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditPaymentInfoPage(initial: _profile.payment),
     );
@@ -1260,6 +1273,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final result = await showModalBottomSheet<AddressInfo>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditShippingAddressPopup(initial: _profile.address),
     );
@@ -1273,6 +1290,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => EditMeasurementsPopup(initial: _profile.nail),
     );
@@ -1368,6 +1388,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         await showModalBottomSheet<ClientArtistCommunicationPreferences>(
           context: context,
           isScrollControlled: true,
+          useSafeArea: true,
+          constraints: isTabletSize(MediaQuery.sizeOf(context))
+              ? const BoxConstraints(maxWidth: 900)
+              : null,
           backgroundColor: Colors.transparent,
           builder: (_) => ClientArtistCommunicationPreferencePopup(
             initialValue: _communicationPreferences,
@@ -1579,6 +1603,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
@@ -1619,6 +1647,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
@@ -2036,13 +2068,14 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     final ref = await _artistModalRef();
     if (ref == null) return const <ArtistPortfolioItem>[];
 
-    final picked =
-        selectedFiles ??
-        await ImagePicker().pickMultiImage(
-          imageQuality: 78,
-          maxWidth: 1600,
-          maxHeight: 1600,
-        );
+    // Deliberately NOT passing imageQuality/maxWidth/maxHeight here.
+    // image_picker's native multi-select compression path has a known bug
+    // (Android especially) where every selected image gets compressed to
+    // the SAME temp filename, so every returned XFile ends up pointing at
+    // the last-written file. _optimizePortfolioUploadBytes below already
+    // does real per-file resize/re-encode, so the native params were
+    // redundant with it and are what caused the duplication.
+    final picked = selectedFiles ?? await ImagePicker().pickMultiImage();
     if (picked.isEmpty) return const <ArtistPortfolioItem>[];
 
     final isClientArtistDoc = ref.table == 'client_artist';
@@ -2187,6 +2220,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 900)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.82,
@@ -2272,6 +2309,10 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
@@ -2344,6 +2385,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -2372,9 +2414,19 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
         ),
 
         body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isTablet ? 1200 : double.infinity,
+              ),
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 24 : 16,
+                  10,
+                  isTablet ? 24 : 16,
+                  18,
+                ),
+                children: [
               _headerGradientCard(
                 child: Column(
                   children: [
@@ -2587,7 +2639,7 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'NFC Request',
+                              'JNT Tap Request',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 12,
@@ -2596,8 +2648,8 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                             const SizedBox(height: 3),
                             Text(
                               _nfcRequestsOn
-                                  ? 'Accepting NFC upgrade requests'
-                                  : 'Not accepting NFC upgrade requests',
+                                  ? 'Accepting JNT Tap upgrade requests'
+                                  : 'Not accepting JNT Tap upgrade requests',
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: AppColors.blackCat.withValues(
@@ -2659,7 +2711,9 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
                 ),
               ),
               const SizedBox(height: 10),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
         bottomNavigationBar: BottomNavigationBar(

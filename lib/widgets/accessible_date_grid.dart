@@ -437,20 +437,27 @@ Future<DateTime?> showAccessibleDatePickerDialog({
 }) {
   return showDialog<DateTime>(
     context: context,
-    builder: (ctx) => Dialog(
-      backgroundColor: AppColors.snow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 540),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-          child: AccessibleDateGrid(
-            fieldLabel: fieldLabel,
-            firstDate: firstDate,
-            lastDate: lastDate,
-            initialSelectedDate: initialSelectedDate,
-            onCancel: () => Navigator.of(ctx).pop(),
-            onConfirm: (picked) => Navigator.of(ctx).pop(picked),
+    barrierLabel: 'Close $fieldLabel date picker',
+    builder: (ctx) => Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: '$fieldLabel date picker',
+      child: Dialog(
+        backgroundColor: AppColors.snow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360, maxHeight: 540),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+            child: AccessibleDateGrid(
+              fieldLabel: fieldLabel,
+              firstDate: firstDate,
+              lastDate: lastDate,
+              initialSelectedDate: initialSelectedDate,
+              onCancel: () => Navigator.of(ctx).pop(),
+              onConfirm: (picked) => Navigator.of(ctx).pop(picked),
+            ),
           ),
         ),
       ),

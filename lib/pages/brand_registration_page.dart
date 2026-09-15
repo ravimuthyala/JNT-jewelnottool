@@ -24,11 +24,13 @@ import '../config/auth_flags.dart';
 import '../services/address_validation_service.dart';
 import '../services/supabase_auth_service.dart';
 import '../utils/registration_input_utils.dart';
+import '../utlis/responsive_layout.dart';
 import '../widgets/registration_profile_upload.dart';
 import '../widgets/communication_preference_section.dart';
 
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
+import 'register_page.dart' show showRegisterModal;
 import 'branding_company_shell_page.dart';
 import 'company_profile_page.dart';
 
@@ -2599,6 +2601,7 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
   Widget build(BuildContext context) {
     const dropdownTextColor = AppColors.blackCat;
     const dropdownBackground = AppColors.snow;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Semantics(
       scopesRoute: true,
@@ -2616,18 +2619,43 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
         child: Scaffold(
           backgroundColor: AppColors.snow,
           appBar: JntModalAppBar(
-            onClose: () => Navigator.of(
-              context,
-              rootNavigator: true,
-            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            onClose: () async {
+              // Return to the existing HomePage underneath this route. A
+              // replacement Home route can dispose later and reset the
+              // tablet layout after the Create Account modal is visible.
+              final rootNavigator = Navigator.of(
+                context,
+                rootNavigator: true,
+              );
+              final currentRoute = ModalRoute.of(context);
+              rootNavigator.pop();
+
+              // Wait until Brand Registration is completely removed before
+              // opening the same Create Account modal used by Login.
+              if (currentRoute != null) {
+                await currentRoute.completed;
+              }
+              if (!rootNavigator.mounted) return;
+              await showRegisterModal(rootNavigator.context);
+            },
             closeTooltip: 'Close brand registration',
             closeIcon: const Icon(Icons.close),
           ),
           body: SafeArea(
-            child: ListView(
-              controller: _registrationScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-              children: [
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: isTablet ? 1000 : double.infinity,
+                ),
+                child: ListView(
+                  controller: _registrationScrollController,
+                  padding: EdgeInsets.fromLTRB(
+                    isTablet ? 24 : 16,
+                    10,
+                    isTablet ? 24 : 16,
+                    18,
+                  ),
+                  children: [
                 Form(
                   key: _formKey,
                   autovalidateMode:
@@ -4289,7 +4317,9 @@ class _BrandRegistrationPageState extends State<BrandRegistrationPage> {
                     ],
                   ),
                 ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

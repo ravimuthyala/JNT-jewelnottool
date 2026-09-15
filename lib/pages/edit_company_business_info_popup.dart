@@ -4,6 +4,7 @@ import '../models/company_business_options.dart';
 import '../theme/app_colors.dart';
 import '../utils/registration_input_utils.dart';
 import '../widgets/phone_country_code_field.dart';
+import '../utlis/responsive_layout.dart';
 
 /// Lightweight draft model (keep here until you create a real model file).
 class CompanyBusinessInfoDraft {
@@ -435,6 +436,7 @@ class _EditCompanyBusinessInfoPopupState
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -448,7 +450,12 @@ class _EditCompanyBusinessInfoPopupState
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 24 : 16,
+                  14,
+                  isTablet ? 24 : 16,
+                  16,
+                ),
                 decoration: const BoxDecoration(
                   color: AppColors.snow,
                   borderRadius: BorderRadius.zero,

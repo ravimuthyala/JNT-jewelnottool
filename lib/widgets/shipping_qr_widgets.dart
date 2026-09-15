@@ -80,12 +80,18 @@ class ShippingQrCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Center(
-            child: QrImageView(
-              data: qrCode,
-              size: 190,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
-              dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+            child: SizedBox(
+              width: 190,
+              height: 190,
+              child: RepaintBoundary(
+                child: QrImageView(
+                  data: qrCode,
+                  size: 190,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                  dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -238,7 +244,22 @@ Future<void> showSimpleQrPrintDialog(BuildContext context, String qrCode) async 
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          QrImageView(data: qrCode, size: 220, backgroundColor: Colors.white),
+          // Fixed-size SizedBox + RepaintBoundary: QrImageView is a
+          // StatefulWidget that lays itself out asynchronously once the QR
+          // encoding finishes, which can otherwise race with AlertDialog's
+          // entrance scale transition and leave the render tree with a
+          // RenderCustomPaint that never receives a final size.
+          SizedBox(
+            width: 220,
+            height: 220,
+            child: RepaintBoundary(
+              child: QrImageView(
+                data: qrCode,
+                size: 220,
+                backgroundColor: Colors.white,
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           const Text(
             'MVP: long-press or screenshot to save on mobile. Use browser print on web.',

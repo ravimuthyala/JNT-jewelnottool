@@ -10,8 +10,9 @@ class RegistrationDraft {
 
   // ── Step 1 · Artist Profile ────────────────────────────────────────────────
   Uint8List? profileBytes;
+  String fullName = '';
   String studioName = '';
-  String displayName = '';
+  DateTime? dateOfBirth;
   String languageSpoken = '';
   String currency = 'US Dollar (USD)';
   String bio = '';

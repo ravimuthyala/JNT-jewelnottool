@@ -19,6 +19,7 @@ import '../widgets/finished_photo_publish_consent.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../widgets/request_modal_accessibility.dart';
+import '../utlis/responsive_layout.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -34,6 +35,10 @@ Future<void> showAcceptedRequestSheet({
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _AcceptedRequestSheet(
       request: request,
@@ -62,6 +67,10 @@ Future<void> showDesigningRequestSheet({
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _AcceptedRequestSheet(
       request: request,
@@ -617,6 +626,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     final clientModalPhotos = _clientModalPhotos();
     return Semantics(
@@ -670,7 +680,12 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                   Expanded(
                     child: ListView(
                       controller: _listController,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      padding: EdgeInsets.fromLTRB(
+                        isTablet ? 24 : 16,
+                        0,
+                        isTablet ? 24 : 16,
+                        16,
+                      ),
                       children: [
                         _topHeader(widget.request, shipDays: widget.shipDays),
 
@@ -1187,11 +1202,15 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
   Future<void> _pickFromGallery() async {
     try {
-      final picked = await _picker.pickMultiImage(
-        imageQuality: 70,
-        maxWidth: 1280,
-        maxHeight: 1280,
-      );
+      // Deliberately NOT passing imageQuality/maxWidth/maxHeight here.
+      // image_picker's native multi-select compression path has a known
+      // bug (Android especially) where every selected image gets
+      // compressed to the SAME temp filename, so every returned XFile ends
+      // up pointing at the last-written file. _validateAndAddPhotos and
+      // _uploadPhotosFor both already compress each file's real bytes via
+      // _normalizeImageBytes, so the native params were redundant with
+      // that and are what caused the duplication.
+      final picked = await _picker.pickMultiImage();
       if (picked.isEmpty) return;
       await _validateAndAddPhotos(picked);
     } finally {
@@ -1270,9 +1289,20 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         invalidType++;
         continue;
       }
-      final bytes = await file.length();
-      if (bytes > _maxArtistImageBytes) {
-        invalidSize++;
+      // Native pickMultiImage no longer pre-compresses (see
+      // _pickFromGallery's comment), so validate against the size AFTER
+      // the same compression _uploadPhotosFor applies at upload time, not
+      // the raw file size -- otherwise every full-resolution camera photo
+      // would fail this check before ever reaching that compression step.
+      try {
+        final raw = await file.readAsBytes();
+        final normalized = _normalizeImageBytes(raw);
+        if (normalized.lengthInBytes > _maxArtistImageBytes) {
+          invalidSize++;
+          continue;
+        }
+      } catch (_) {
+        invalidType++;
         continue;
       }
       accepted.add(file);
@@ -2141,7 +2171,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,
@@ -3326,7 +3356,7 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
               Expanded(
                 child: Align(
                   alignment: Alignment.center,
-                  child: _chipInfo(icon: Icons.nfc_rounded, text: 'NFC'),
+                  child: _chipInfo(icon: Icons.nfc_rounded, text: 'JNT Tap'),
                 ),
               ),
             ],

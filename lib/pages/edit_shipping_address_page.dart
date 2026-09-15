@@ -6,6 +6,7 @@ import '../models/client_profile_models.dart';
 import '../services/address_validation_service.dart';
 import '../services/edit_profile_supabase_save.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 
 class EditShippingAddressPopup extends StatefulWidget {
@@ -157,6 +158,7 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Semantics(
       scopesRoute: true,
@@ -174,7 +176,12 @@ class _EditShippingAddressPopupState extends State<EditShippingAddressPopup> {
               borderRadius: BorderRadius.zero,
             ),
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                10,
+                isTablet ? 24 : 16,
+                18,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

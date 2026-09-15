@@ -2124,6 +2124,48 @@ class _BaseOrderDetails extends StatelessWidget {
                             final rootData = row ?? const <String, dynamic>{};
                             final detailsData = _asMap(rootData['details']);
 
+                            // Re-checked against this fresh fetch (not the
+                            // possibly-stale `order` this page was built
+                            // from) so cancellation stays blocked once an
+                            // artist has accepted, even if that happened in
+                            // the window between this page loading and Brand
+                            // tapping Cancel -- the button itself is only
+                            // ever shown pre-acceptance (canCancelBeforeArtistAccept
+                            // above), but nothing previously stopped the
+                            // write itself from going through regardless.
+                            String pickEmail(List<Object?> values) {
+                              for (final value in values) {
+                                final text = (value ?? '')
+                                    .toString()
+                                    .trim()
+                                    .toLowerCase();
+                                if (text.isNotEmpty) return text;
+                              }
+                              return '';
+                            }
+
+                            final acceptedArtistEmail = pickEmail(<Object?>[
+                              rootData['accepted_by_artist_email'],
+                              rootData['acceptedByArtistEmail'],
+                              detailsData['acceptance'] is Map
+                                  ? (detailsData['acceptance']
+                                        as Map)['acceptedByArtistEmail']
+                                  : null,
+                            ]);
+                            if (acceptedArtistEmail.isNotEmpty) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'An artist has already accepted this '
+                                    'request, so it can no longer be '
+                                    'cancelled.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
                             final typedReason = result.reason.trim();
                             final selectedReason = typedReason.isNotEmpty
                                 ? typedReason

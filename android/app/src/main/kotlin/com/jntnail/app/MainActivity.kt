@@ -1,4 +1,4 @@
-package com.example.jewelnottool
+package com.jntnail.app
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode

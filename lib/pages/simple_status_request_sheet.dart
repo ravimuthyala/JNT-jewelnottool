@@ -11,6 +11,7 @@ import '../services/storage_url_resolver.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
 import '../widgets/group_client_measurements_tabs.dart';
+import '../utlis/responsive_layout.dart';
 
 enum SimpleRequestStatus { cancelled, declined, expired }
 
@@ -25,6 +26,10 @@ Future<void> showSimpleStatusRequestSheet({
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _SimpleStatusRequestSheet(
       request: request,
@@ -119,9 +124,8 @@ class _SimpleStatusRequestSheetState extends State<_SimpleStatusRequestSheet> {
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.78;
     final cfg = _statusConfig(widget.status);
-    final sheetMediaQuery = MediaQuery.of(
-      context,
-    ).copyWith(textScaler: const TextScaler.linear(1.0));
+    final sheetMediaQuery = MediaQuery.of(context);
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final isGroup = widget.request.orderType == RequestOrderTypeV2.group;
 
     return Semantics(
@@ -160,7 +164,12 @@ class _SimpleStatusRequestSheetState extends State<_SimpleStatusRequestSheet> {
                       Expanded(
                         child: SingleChildScrollView(
                           controller: _scrollController,
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                          padding: EdgeInsets.fromLTRB(
+                            isTablet ? 24 : 16,
+                            0,
+                            isTablet ? 24 : 16,
+                            14,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -278,7 +287,12 @@ class _SimpleStatusRequestSheetState extends State<_SimpleStatusRequestSheet> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                        padding: EdgeInsets.fromLTRB(
+                          isTablet ? 24 : 16,
+                          8,
+                          isTablet ? 24 : 16,
+                          14,
+                        ),
                         child: Center(
                           child: Wrap(
                             spacing: 10,

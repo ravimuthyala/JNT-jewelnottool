@@ -17,6 +17,7 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/autocomplete_dropdown_sizing.dart';
 import '../widgets/request_modal_accessibility.dart';
+import '../utlis/responsive_layout.dart';
 
 String _artistLocationText(String city, String state) {
   return <String>[
@@ -1185,7 +1186,11 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
               ),
 
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+          padding: responsivePagePadding(
+            context,
+            phone: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+            maxContentWidth: 900,
+          ),
           children: [
             Semantics(
               header: true,
@@ -1486,7 +1491,11 @@ class _ClientArtistsPageState extends State<ClientArtistsPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: AppColors.blackCat,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000.0)
+          : null,
       builder: (_) => FractionallySizedBox(
         heightFactor: 0.94,
         child: _SupabaseArtistDetailsSheet(
@@ -1765,7 +1774,7 @@ class _ArtistCard extends StatelessWidget {
     final directRequestLabel = canRequest
         ? 'accepts direct requests'
         : 'does not accept direct requests';
-    final nfcLabel = artist.acceptsNfcRequests ? ', accepts NFC requests' : '';
+    final nfcLabel = artist.acceptsNfcRequests ? ', accepts JNT Tap requests' : '';
 
     return 'Artist ${artist.name}, $ratingLabel, $locationLabel, '
         'budget ${artist.budgetMin} to ${artist.budgetMax} dollars, '
@@ -1774,6 +1783,10 @@ class _ArtistCard extends StatelessWidget {
   }
 
   Widget _artistSummary(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+    final titleFontSize = isTablet ? 16.0 : 14.0;
+    final bodyFontSize = isTablet ? 14.0 : 12.0;
+
     return Semantics(
       button: true,
       label: _artistSummaryLabel(),
@@ -1803,9 +1816,9 @@ class _ArtistCard extends StatelessWidget {
                             artist.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                              fontSize: titleFontSize,
                               fontFamily: 'ArialBold',
                               color: AppColors.blackCat,
                             ),
@@ -1824,9 +1837,9 @@ class _ArtistCard extends StatelessWidget {
                           artist.rating <= 0
                               ? 'N/A'
                               : artist.rating.toStringAsFixed(1),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
-                            fontSize: 12,
+                            fontSize: bodyFontSize,
                             color: AppColors.blackCat,
                           ),
                         ),
@@ -1840,27 +1853,27 @@ class _ArtistCard extends StatelessWidget {
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.blackCat,
                         fontWeight: FontWeight.w500,
-                        fontSize: 12,
+                        fontSize: bodyFontSize,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Budget: \$${artist.budgetMin} - \$${artist.budgetMax}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.blackCat,
                         fontWeight: FontWeight.w500,
-                        fontSize: 12,
+                        fontSize: bodyFontSize,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.verified_outlined,
-                          size: 16,
+                          size: isTablet ? 18 : 16,
                           color: AppColors.blackCat,
                         ),
                         const SizedBox(width: 6),
@@ -1869,10 +1882,10 @@ class _ArtistCard extends StatelessWidget {
                             _shortCredential(artist.credential),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.blackCat,
                               fontWeight: FontWeight.w500,
-                              fontSize: 12,
+                              fontSize: bodyFontSize,
                             ),
                           ),
                         ),
@@ -1880,20 +1893,20 @@ class _ArtistCard extends StatelessWidget {
                     ),
                     if (artist.acceptsNfcRequests) ...[
                       const SizedBox(height: 6),
-                      const Row(
+                      Row(
                         children: [
                           Icon(
                             Icons.nfc_rounded,
-                            size: 16,
+                            size: isTablet ? 18 : 16,
                             color: AppColors.blackCat,
                           ),
                           SizedBox(width: 6),
                           Text(
-                            'Accepts NFC',
+                            'Accepts JNT Tap',
                             style: TextStyle(
                               color: AppColors.blackCat,
                               fontWeight: FontWeight.w500,
-                              fontSize: 12,
+                              fontSize: bodyFontSize,
                             ),
                           ),
                         ],
@@ -1909,7 +1922,8 @@ class _ArtistCard extends StatelessWidget {
     );
   }
 
-  Widget _requestButton() {
+  Widget _requestButton(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final label = canRequest
         ? 'Request ${artist.name}'
         : 'Request ${artist.name}, unavailable';
@@ -1934,11 +1948,11 @@ class _ArtistCard extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             ),
             onPressed: canRequest ? onDesign : null,
-            child: const Text(
+            child: Text(
               'Request',
               style: TextStyle(
                 fontWeight: FontWeight.w400,
-                fontSize: 12,
+                fontSize: isTablet ? 14 : 12,
                 fontFamily: 'Arial',
                 color: AppColors.snow,
               ),
@@ -1952,6 +1966,7 @@ class _ArtistCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final largeText = MediaQuery.textScalerOf(context).scale(1.0) > 1.30;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1961,7 +1976,7 @@ class _ArtistCard extends StatelessWidget {
             const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerRight,
-              child: _requestButton(),
+              child: _requestButton(context),
             ),
           ] else
           Row(
@@ -1969,16 +1984,16 @@ class _ArtistCard extends StatelessWidget {
             children: [
               Expanded(child: _artistSummary(context)),
               const SizedBox(width: 10),
-              _requestButton(),
+              _requestButton(context),
             ],
           ),
           const SizedBox(height: 14),
-          const ExcludeSemantics(
+          ExcludeSemantics(
             child: Text(
               'Previous Art',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                fontSize: 14,
+                fontSize: isTablet ? 16 : 14,
                 fontFamily: 'ArialBold',
               ),
             ),
@@ -1993,20 +2008,29 @@ class _ArtistCard extends StatelessWidget {
                   style: TextStyle(
                     color: AppColors.blackCat.withValues(alpha: 0.55),
                     fontWeight: FontWeight.w500,
-                    fontSize: 12,
+                    fontSize: isTablet ? 14 : 12,
                     fontFamily: 'Arial',
                   ),
                 ),
               ),
             )
           else
-            SizedBox(
-              height: 110,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  const spacing = 10.0;
-                  final tileWidth = (constraints.maxWidth - (spacing * 2)) / 3;
-                  return ListView.separated(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const spacing = 10.0;
+                final visibleTileCount = isTablet ? 3 : 2;
+                final tileWidth =
+                    (constraints.maxWidth -
+                        (spacing * (visibleTileCount - 1))) /
+                    visibleTileCount;
+                // Portfolio photos are displayed as photos rather than as
+                // very wide banners. A fixed 4:3 ratio prevents tablet tiles
+                // from looking squeezed while BoxFit.cover preserves the
+                // source image's proportions.
+                final tileHeight = tileWidth * 3 / 4;
+                return SizedBox(
+                  height: tileHeight,
+                  child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: artist.projects.length,
                     separatorBuilder: (_, _) => const SizedBox(width: spacing),
@@ -2018,9 +2042,9 @@ class _ArtistCard extends StatelessWidget {
                       onTap: () =>
                           onOpenProjectImage(artist.projects[i].imageUrl),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -2448,6 +2472,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final artistName = _safeText(artist.name, fallback: 'Artist');
     final avatarUrl = _safeText(artist.avatarUrl);
     final location = [
@@ -2517,7 +2542,12 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 24 : 18,
+                  12,
+                  isTablet ? 24 : 18,
+                  16,
+                ),
                 children: [
                   const SizedBox(height: 2),
                   Center(
@@ -2604,7 +2634,7 @@ class _SupabaseArtistDetailsSheet extends StatelessWidget {
                               ),
                               SizedBox(width: 6),
                               Text(
-                                'Accepts NFC',
+                                'Accepts JNT Tap',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 13,

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../services/notifications_service.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
@@ -2410,7 +2411,7 @@ class _BaseOrderDetails extends StatelessWidget {
     return double.tryParse((value ?? '').toString().trim());
   }
 
-  _BrandCollaborationOrderPayload _brandCollaborationPayloadFromMaps(
+  static _BrandCollaborationOrderPayload _brandCollaborationPayloadFromMaps(
     Map<String, dynamic> rootMap,
   ) {
     final detailsMap = _mapFromDynamic(rootMap['details']);
@@ -2456,21 +2457,37 @@ class _BaseOrderDetails extends StatelessWidget {
         askText: order.brandCollaborationAskText,
       );
 
-  Future<_BrandCollaborationOrderPayload>
-  _loadBrandCollaborationPayload() async {
-    if (!_isBrandRequest) return const _BrandCollaborationOrderPayload.empty();
+  // _BaseOrderDetails is a StatelessWidget rebuilt whenever its parent
+  // rebuilds, so without this cache every rebuild would re-issue these
+  // lookups. Memoized by request id (module-level, so it survives across
+  // separate _BaseOrderDetails instances for the same request).
+  static final Map<String, Future<_BrandCollaborationOrderPayload>>
+  _brandCollaborationPayloadCache =
+      <String, Future<_BrandCollaborationOrderPayload>>{};
+
+  Future<_BrandCollaborationOrderPayload> _loadBrandCollaborationPayload() {
+    if (!_isBrandRequest) {
+      return Future.value(const _BrandCollaborationOrderPayload.empty());
+    }
 
     final local = _localBrandCollaborationPayload;
-    if (local.hasBrandCollaboration) return local;
+    if (local.hasBrandCollaboration) return Future.value(local);
 
     final requestId = order.id.trim();
     if (requestId.isEmpty) {
-      return const _BrandCollaborationOrderPayload.empty();
+      return Future.value(const _BrandCollaborationOrderPayload.empty());
     }
 
     final collection = order.sourceCollection.trim().isEmpty
         ? 'Company_Custom_Requests'
         : order.sourceCollection.trim();
+
+    return _brandCollaborationPayloadCache[requestId] ??=
+        _fetchBrandCollaborationPayload(requestId, collection);
+  }
+
+  static Future<_BrandCollaborationOrderPayload>
+  _fetchBrandCollaborationPayload(String requestId, String collection) async {
     final client = Supabase.instance.client;
 
     try {
@@ -2548,16 +2565,34 @@ class _BaseOrderDetails extends StatelessWidget {
     }
   }
 
+  // _BaseOrderDetails is a StatelessWidget rebuilt whenever its parent
+  // rebuilds, so without this cache every rebuild would re-issue this
+  // artist-profile lookup. Memoized by email (module-level, so it also
+  // survives across separate _BaseOrderDetails instances for the same
+  // artist rather than just this one widget's lifetime).
+  static final Map<String, Future<_AcceptedArtistMeta>>
+  _acceptedArtistMetaCache = <String, Future<_AcceptedArtistMeta>>{};
+
   static Future<_AcceptedArtistMeta> _loadAcceptedArtistMeta(
     _OrderSafe order,
-  ) async {
+  ) {
     final fallback = _AcceptedArtistMeta(
       name: order.artistName.trim(),
       profileImage: order.artistProfileImage.trim(),
     );
     final email = order.acceptedByArtistEmail.trim().toLowerCase();
-    if (email.isEmpty) return fallback;
+    if (email.isEmpty) return Future.value(fallback);
 
+    return _acceptedArtistMetaCache[email] ??= _fetchAcceptedArtistMeta(
+      email,
+      fallback,
+    );
+  }
+
+  static Future<_AcceptedArtistMeta> _fetchAcceptedArtistMeta(
+    String email,
+    _AcceptedArtistMeta fallback,
+  ) async {
     final supabase = Supabase.instance.client;
 
     for (final table in const <String>['artist', 'client_artist']) {
@@ -2594,7 +2629,7 @@ class _BaseOrderDetails extends StatelessWidget {
           const <String, dynamic>{};
 
       final name = _firstNonEmpty([
-        order.artistName,
+        fallback.name,
         profile['displayName'],
         profile['name'],
         basic['displayName'],
@@ -2607,7 +2642,7 @@ class _BaseOrderDetails extends StatelessWidget {
       ]);
 
       final image = _firstNonEmpty([
-        order.artistProfileImage,
+        fallback.profileImage,
         profile['profileImageUrl'],
         profile['avatarUrl'],
         profile['profileImagePath'],
@@ -2832,7 +2867,11 @@ class _BaseOrderDetails extends StatelessWidget {
       ),
       body: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+        padding: responsivePagePadding(
+          context,
+          phone: const EdgeInsets.fromLTRB(16, 6, 16, 18),
+          maxContentWidth: 900,
+        ),
         children: [
           if (isCancelledStatus) ...[
             Row(
@@ -3456,6 +3495,27 @@ class _BaseOrderDetails extends StatelessWidget {
                             : null),
                       ]).toLowerCase();
                       final artistAccepted = acceptedArtistEmail.isNotEmpty;
+                      if (artistAccepted) {
+                        // Re-checked against a fresh fetch of the row taken
+                        // moments ago (not the possibly-stale `order` this
+                        // page was built from), so this also closes the race
+                        // where an artist accepts between the page loading
+                        // and the client tapping Cancel -- the Cancel button
+                        // itself is only ever shown pre-acceptance (see
+                        // isSubmittedStatus above), but nothing previously
+                        // stopped the write itself from going through if it
+                        // was reached anyway.
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'An artist has already accepted this request, '
+                              'so it can no longer be cancelled.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       final shouldReopenPool =
                           isBrandRequest && isOpenClientPool && !artistAccepted;
                       final selectedReason = result.reason.trim();
@@ -3515,15 +3575,23 @@ class _BaseOrderDetails extends StatelessWidget {
                         },
                       }, SetOptions(merge: true));
 
-                      await _notifyArtistsOnClientCancellation(
-                        reason: normalizedReason,
-                        rootData: rootData,
-                        detailsData: detailsData,
-                        sourceCollection: sourceCollection,
-                      );
-
                       if (!context.mounted) return;
                       Navigator.of(context).pop();
+
+                      // Notifying the artist pool (and, for brand requests,
+                      // the brand/admins) can mean fetching every artist row
+                      // and sending a notification per match -- that's slow
+                      // at scale and the user is only waiting on the status
+                      // change, not on who gets told about it. Run it in the
+                      // background instead of blocking the dialog dismissal.
+                      unawaited(
+                        _notifyArtistsOnClientCancellation(
+                          reason: normalizedReason,
+                          rootData: rootData,
+                          detailsData: detailsData,
+                          sourceCollection: sourceCollection,
+                        ).catchError((_) {}),
+                      );
                     } catch (e) {
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -4135,24 +4203,32 @@ class _BaseOrderDetails extends StatelessWidget {
 
       final supabase = Supabase.instance.client;
 
-      for (final table in const ['artist', 'client_artist']) {
-        try {
-          final rows = await supabase.from(table).select();
+      await Future.wait(
+        const ['artist', 'client_artist'].map((table) async {
+          try {
+            // isBrandEligibleArtist only reads email/profile/ascension --
+            // both `artist` and `client_artist` also carry big jsonb blobs
+            // (portfolio, portfolio_images, panel_*_images, etc.) that would
+            // otherwise be pulled over the wire for every row for nothing.
+            final rows = await supabase
+                .from(table)
+                .select('email, profile, ascension');
 
-          for (final row in rows) {
-            final data = Map<String, dynamic>.from(row);
+            for (final row in rows) {
+              final data = Map<String, dynamic>.from(row);
 
-            if (isBrandRequest && !isBrandEligibleArtist(data)) {
-              continue;
+              if (isBrandRequest && !isBrandEligibleArtist(data)) {
+                continue;
+              }
+
+              final email = readEmail(data['email']);
+              if (email.isNotEmpty) {
+                targets.add(email);
+              }
             }
-
-            final email = readEmail(data['email']);
-            if (email.isNotEmpty) {
-              targets.add(email);
-            }
-          }
-        } catch (_) {}
-      }
+          } catch (_) {}
+        }),
+      );
     }
 
     if (isBrandRequest) {
@@ -4161,20 +4237,22 @@ class _BaseOrderDetails extends StatelessWidget {
             rootData: rootData,
             detailsData: detailsData,
           );
-      for (final brandEmail in brandRecipientEmails) {
-        try {
-          await NotificationsService.createUserNotification(
-            receiverEmail: brandEmail,
-            title: 'Brand Request Cancelled',
-            body:
-                '$clientName cancelled your $campaignName brand request $orderRef $reason',
-            type: 'brand_request_cancelled_by_client',
-            orderId: order.id,
-            orderNumber: orderRef,
-            sourceCollection: sourceCollection,
-          );
-        } catch (_) {}
-      }
+      await Future.wait(
+        brandRecipientEmails.map((brandEmail) async {
+          try {
+            await NotificationsService.createUserNotification(
+              receiverEmail: brandEmail,
+              title: 'Brand Request Cancelled',
+              body:
+                  '$clientName cancelled your $campaignName brand request $orderRef $reason',
+              type: 'brand_request_cancelled_by_client',
+              orderId: order.id,
+              orderNumber: orderRef,
+              sourceCollection: sourceCollection,
+            );
+          } catch (_) {}
+        }),
+      );
 
       await NotificationsService.notifyAdmins(
         title: 'Brand Request Cancelled',
@@ -4187,25 +4265,27 @@ class _BaseOrderDetails extends StatelessWidget {
       );
     }
 
-    for (final email in targets) {
-      try {
-        await NotificationsService.createUserNotification(
-          receiverEmail: email,
-          title: isBrandRequest
-              ? 'Brand Request Cancelled'
-              : 'Client Cancelled Request',
-          body: isBrandRequest
-              ? '$clientName cancelled the $brandCompany $campaignName brand request $orderRef $reason'
-              : 'Client has cancelled the request. Reason: $reason',
-          type: isBrandRequest
-              ? 'artist_pool_brand_request_cancelled_by_client'
-              : 'client_cancelled_request',
-          orderId: order.id,
-          orderNumber: orderRef,
-          sourceCollection: sourceCollection,
-        );
-      } catch (_) {}
-    }
+    await Future.wait(
+      targets.map((email) async {
+        try {
+          await NotificationsService.createUserNotification(
+            receiverEmail: email,
+            title: isBrandRequest
+                ? 'Brand Request Cancelled'
+                : 'Client Cancelled Request',
+            body: isBrandRequest
+                ? '$clientName cancelled the $brandCompany $campaignName brand request $orderRef $reason'
+                : 'Client has cancelled the request. Reason: $reason',
+            type: isBrandRequest
+                ? 'artist_pool_brand_request_cancelled_by_client'
+                : 'client_cancelled_request',
+            orderId: order.id,
+            orderNumber: orderRef,
+            sourceCollection: sourceCollection,
+          );
+        } catch (_) {}
+      }),
+    );
   }
 
   Widget _artistProfileImage(String raw) {
@@ -5562,7 +5642,7 @@ class _BaseOrderDetails extends StatelessWidget {
           ? 'measurement not provided'
           : '$numericValue millimeters';
       final semanticLabel =
-          '$title, $label, $spokenValue${hasNfc ? ', NFC enabled' : ''}';
+          '$title, $label, $spokenValue${hasNfc ? ', JNT Tap enabled' : ''}';
 
       return Semantics(
         container: true,
@@ -5637,22 +5717,33 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   static Widget _nfcDimensionChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: const Text(
-        'NFC',
-        style: TextStyle(
-          color: AppColors.blackCat,
-          fontSize: 6.5,
-          fontWeight: FontWeight.w700,
-          fontFamily: 'Arial',
-        ),
-      ),
+    // "JNT Tap" is much longer than the old "NFC" label but this chip sits
+    // in a tight row alongside the finger name and mm value -- shrink the
+    // font specifically on phone (tablet/iPad has more room) so it still
+    // fits without wrapping or overflowing. Builder is used purely to reach
+    // a BuildContext here without threading one through every calling
+    // method (_dimensionHandCard, _nailDimensionsContent, etc.).
+    return Builder(
+      builder: (context) {
+        final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
+          decoration: BoxDecoration(
+            color: AppColors.balletSlippers,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: AppColors.blackCatBorderLight),
+          ),
+          child: Text(
+            'JNT Tap',
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontSize: isTablet ? 6.5 : 7,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arial',
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -6499,7 +6590,7 @@ class _LocalMeasurementsBody extends StatelessWidget {
       return Semantics(
         container: true,
         label:
-            '$title, $label, $spokenValue${hasNfc ? ', NFC enabled' : ''}',
+            '$title, $label, $spokenValue${hasNfc ? ', JNT Tap enabled' : ''}',
         child: ExcludeSemantics(
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -6578,22 +6669,31 @@ class _LocalMeasurementsBody extends StatelessWidget {
   }
 
   Widget _nfcChip() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
-      decoration: BoxDecoration(
-        color: AppColors.balletSlippers,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCatBorderLight),
-      ),
-      child: const Text(
-        'NFC',
-        style: TextStyle(
-          color: AppColors.blackCat,
-          fontSize: 6.5,
-          fontWeight: FontWeight.w700,
-          fontFamily: 'Arial',
-        ),
-      ),
+    // "JNT Tap" is much longer than the old "NFC" label but this chip sits
+    // in a tight row alongside the finger name and mm value -- shrink the
+    // font specifically on phone (tablet/iPad has more room) so it still
+    // fits without wrapping or overflowing.
+    return Builder(
+      builder: (context) {
+        final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.5),
+          decoration: BoxDecoration(
+            color: AppColors.balletSlippers,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: AppColors.blackCatBorderLight),
+          ),
+          child: Text(
+            'JNT Tap',
+            style: TextStyle(
+              color: AppColors.blackCat,
+              fontSize: isTablet ? 6.5 : 7,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Arial',
+            ),
+          ),
+        );
+      },
     );
   }
 }

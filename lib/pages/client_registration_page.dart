@@ -1,7 +1,7 @@
 // lib/pages/client_registration_page.dart
 
 import 'dart:async';
-import 'dart:math';
+import 'dart:math' show min;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -16,13 +16,14 @@ import '../theme/app_colors.dart';
 import '../config/auth_flags.dart';
 import '../models/client_profile_models.dart';
 import '../services/notifications_service.dart';
+import '../utlis/responsive_layout.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 
 import 'email_verification_pending_page.dart';
 import 'home_page.dart';
-import 'login_page.dart';
+import 'register_page.dart' show showRegisterModal;
 import 'client_shell_page.dart';
 
 import '../widgets/nail_preferences_inline_editor.dart';
@@ -146,36 +147,6 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       ? (_selectedState ?? '').trim()
       : _manualStateCtrl.text.trim();
 
-  void _autofillRandomData() {
-    final rand = Random();
-    final randomNum = rand.nextInt(1000000);
-    final randomState = usStates[rand.nextInt(usStates.length)];
-    setState(() {
-      _nameCtrl.text = 'Client $randomNum';
-      _emailCtrl.text = 'client_$randomNum@example.com';
-      _passCtrl.text = 'Password123!';
-      _confirmPassCtrl.text = 'Password123!';
-
-      final birthYear = DateTime.now().year - 15 - rand.nextInt(30);
-      _dateOfBirth = DateTime(birthYear, 1 + rand.nextInt(11), 1 + rand.nextInt(27));
-      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(_dateOfBirth!);
-      final p1 = 500 + rand.nextInt(400);
-      final p2 = 100 + rand.nextInt(899);
-      final p3 = 1000 + rand.nextInt(8999);
-      _phoneCtrl.text = '($p1) $p2-$p3';
-
-      _instagramCtrl.text = 'client_$randomNum';
-      _tiktokCtrl.text = 'client_$randomNum';
-      _bioCtrl.text = 'This is a test bio for client $randomNum.';
-      _streetCtrl.text = '${100 + rand.nextInt(900)} Test St';
-      _cityCtrl.text = 'Test City';
-      _zipCtrl.text = '${10000 + rand.nextInt(89999)}';
-      _selectedState = randomState;
-      _selectedCountry = 'United States';
-      _manualStateCtrl.clear();
-    });
-  }
-
   void _authLog(String message) {
     debugPrint('[CLIENT-REG] $message');
   }
@@ -220,6 +191,12 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Registration is a full-page route. On tablets/iPads the application
+    // shell otherwise keeps it inside the centered phone-width preview frame.
+    // This flag only changes the outer route constraint; phone layouts are
+    // unaffected because they already occupy the full available width.
+    fullBleedPageActive.value = true;
   }
 
   @override
@@ -1509,6 +1486,17 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
     String? Function(String?)? validator,
   }) {
     return FormField<String>(
+      // Include the externally selected value in the key so values populated
+      // by address lookup/autofill (e.g. State from the street-address
+      // suggestion) become the FormField's real initial value instead of
+      // leaving the field visually stuck empty -- FormField/Autocomplete's
+      // own `initialValue` params are only ever applied once, at first
+      // build, and don't re-sync when this widget rebuilds with a new
+      // `selectedValue` from outside. Matches the same fix already applied
+      // in client_artist_registration_page.dart's equivalent picker.
+      key: ValueKey<String>(
+        'registration-choice-$label-${(selectedValue ?? '').trim()}',
+      ),
       initialValue: selectedValue,
       validator: validator,
       builder: (field) {
@@ -1646,10 +1634,19 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
   Future<void> _showAgeIneligibleDialog() async {
     await showRegistrationAgeIneligibleDialog(context: context);
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginDialog()),
-      (route) => false,
-    );
+    // Same "close registration, return to Home, reopen the role picker"
+    // sequence as this page's own X button -- an ineligible DOB means this
+    // signup attempt can't continue, so send them back to the start rather
+    // than leaving them stuck here or bouncing to a login screen that
+    // doesn't apply (they don't have an account).
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final currentRoute = ModalRoute.of(context);
+    rootNavigator.pop();
+    if (currentRoute != null) {
+      await currentRoute.completed;
+    }
+    if (!rootNavigator.mounted) return;
+    await showRegisterModal(rootNavigator.context);
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -1671,10 +1668,20 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
 
   // Lets a sighted or screen-reader user type the date directly instead of
   // requiring the calendar picker. Age-eligibility is re-checked at submit
-  // time (_onCreateAccount) regardless of entry method, so this only needs
-  // to track the parsed value -- not repeat that check on every keystroke.
+  // time (_onCreateAccount) regardless of entry method. Also checks
+  // eligibility as soon as a complete, parseable date is typed -- matches
+  // the picker path so the ineligibility dialog fires right at the DOB
+  // field itself, not only later at the Create Account button.
+  // tryParseMmDdYyyy returns null for an incomplete in-progress string, so
+  // this doesn't fire on every keystroke, only once the date is complete.
   void _onDateOfBirthTyped(String value) {
-    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
+    final parsed = tryParseMmDdYyyy(value);
+    setState(() => _dateOfBirth = parsed);
+    if (parsed != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(parsed) &&
+        mounted) {
+      _showAgeIneligibleDialog();
+    }
   }
 
   void _onEmailChanged(String value) {
@@ -2109,7 +2116,7 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
       await SupabaseAuthService.logout();
 
       _authLog('calling SupabaseAuthService.signup');
-      final user = await SupabaseAuthService.signup(
+      var user = await SupabaseAuthService.signup(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text.trim(),
       );
@@ -2120,13 +2127,39 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         throw Exception('Unable to create user.');
       }
 
+      // Supabase can return a "successful" signUp with a user but no
+      // session -- e.g. this exact email already has a prior unconfirmed
+      // signup (GoTrue masks this as success rather than an error, to avoid
+      // leaking which emails are registered). Writing to the client table
+      // right after would fail RLS since auth.uid() is null with no session
+      // attached. Recover the same way the "already registered" branch
+      // below does: sign in with the same credentials to force a real
+      // session before writing anything.
+      if (SupabaseBootstrap.client.auth.currentSession == null) {
+        _authLog('signup succeeded without a session, retrying as login');
+        user = await SupabaseAuthService.login(
+          email: _emailCtrl.text.trim(),
+          password: _passCtrl.text.trim(),
+        );
+      }
+
+      if (user == null || SupabaseBootstrap.client.auth.currentSession == null) {
+        throw const AuthException(
+          'Please confirm your email, then try creating your account again.',
+        );
+      }
+
       await _finishClientRegistrationForUser(user: user, draft: draft);
     } on AuthException catch (e) {
       final message = e.message.toLowerCase();
-      final isAlreadyRegistered =
-          message.contains('already registered') ||
-          message.contains('already exists') ||
-          message.contains('user already registered');
+      // A plain 'already' substring check, not a longer exact phrase --
+      // the Admin API's duplicate-email wording ("has already been
+      // registered") doesn't contain the contiguous phrase "already
+      // registered", so a stricter check here silently skipped the
+      // repair path below and just showed the raw error instead. Matches
+      // the same check already used in the artist/brand/client-artist
+      // registration flows.
+      final isAlreadyRegistered = message.contains('already');
 
       if (isAlreadyRegistered) {
         final existingRole = await SupabaseAuthService.findExistingRoleForEmail(
@@ -2380,14 +2413,18 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                       ),
                       const SizedBox(height: 6),
                       SizedBox(
-                        height: 30,
+                        height: isTabletSize(MediaQuery.sizeOf(context))
+                            ? 34
+                            : 30,
                         child: Text(
                           _registrationStepTitles[index],
                           textAlign: TextAlign.center,
                           softWrap: true,
                           style: TextStyle(
                             fontFamily: 'Arial',
-                            fontSize: 9,
+                            fontSize: isTabletSize(MediaQuery.sizeOf(context))
+                                ? 11
+                                : 9,
                             fontWeight: selected
                                 ? FontWeight.w700
                                 : FontWeight.w500,
@@ -2534,636 +2571,704 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
         child: Scaffold(
           backgroundColor: _clientRegBodyBg,
           appBar: JntModalAppBar(
-            onClose: () => Navigator.of(
-              context,
-              rootNavigator: true,
-            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            onClose: () async {
+              // The existing HomePage is already underneath this route.
+              // Pop back to it instead of constructing a second HomePage;
+              // disposing that duplicate route later was resetting the
+              // tablet full-bleed flag after the modal had appeared, causing
+              // the visible full-width -> phone-width snap.
+              final rootNavigator = Navigator.of(context, rootNavigator: true);
+              final currentRoute = ModalRoute.of(context);
+              rootNavigator.pop();
+
+              // Wait until ClientRegistrationPage is completely removed and
+              // HomePage is again the visible route before opening the modal.
+              // This eliminates the competing route lifecycle callbacks.
+              if (currentRoute != null) {
+                await currentRoute.completed;
+              }
+              if (!rootNavigator.mounted) return;
+              await showRegisterModal(rootNavigator.context);
+            },
             closeTooltip: 'Close client registration',
             closeIcon: const Icon(Icons.close),
-            leadingWidth: 60,
-            leading: Tooltip(
-              message: 'Fill dummy data',
-              child: IconButton(
-                icon: const Icon(Icons.auto_fix_high),
-                iconSize: 20,
-                color: AppColors.blackCat,
-                onPressed: _autofillRandomData,
-                style: IconButton.styleFrom(
-                  foregroundColor: AppColors.blackCat,
-                  minimumSize: const Size(40, 40),
-                  padding: const EdgeInsets.all(8),
-                  shape: const RoundedRectangleBorder(),
-                ),
-              ),
-            ),
           ),
           body: SafeArea(
-            child: ListView(
-              controller: _registrationScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-              children: [
-                Form(
-                  key: _formKey,
-                  autovalidateMode:
-                      _validationTriggeredStep == _registrationStep
-                      ? AutovalidateMode.always
-                      : AutovalidateMode.disabled,
-                  child: Column(
-                    children: [
-                      _registrationProgressTabs(),
-                      if (_registrationStep == 0) ...[
-                        _SectionCard(
-                          title: 'Basic Information',
-                          subtitle:
-                              'Fill in your details to create your client account',
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Preserve the existing phone layout exactly. On a tablet or
+                // iPad, use the wider viewport while keeping long form fields
+                // readable instead of stretching them edge-to-edge.
+                final isTablet = constraints.maxWidth >= 600;
+                final horizontalPadding = isTablet ? 24.0 : 16.0;
+                final availableWidth =
+                    constraints.maxWidth - (horizontalPadding * 2);
+                final contentWidth = isTablet
+                    ? min(availableWidth, 900.0)
+                    : availableWidth;
+
+                return ListView(
+                  controller: _registrationScrollController,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    10,
+                    horizontalPadding,
+                    18,
+                  ),
+                  children: [
+                    Center(
+                      child: SizedBox(
+                        width: contentWidth,
+                        child: Form(
+                          key: _formKey,
+                          autovalidateMode:
+                              _validationTriggeredStep == _registrationStep
+                              ? AutovalidateMode.always
+                              : AutovalidateMode.disabled,
                           child: Column(
                             children: [
-                              const SizedBox(height: 4),
-                              _ProfileUpload(
-                                imageBytes: _profilePhotoBytes,
-                                onTap: _pickProfilePhoto,
-                                focusNode: _profilePhotoFocusNode,
-                              ),
-                              const SizedBox(height: 6),
+                              _registrationProgressTabs(),
+                              if (_registrationStep == 0) ...[
+                                _SectionCard(
+                                  title: 'Basic Information',
+                                  subtitle:
+                                      'Fill in your details to create your client account',
+                                  child: Column(
+                                    children: [
+                                      const SizedBox(height: 4),
+                                      _ProfileUpload(
+                                        imageBytes: _profilePhotoBytes,
+                                        onTap: _pickProfilePhoto,
+                                        focusNode: _profilePhotoFocusNode,
+                                      ),
+                                      const SizedBox(height: 6),
 
-                              _FieldLabel.required('Name'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _nameCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
+                                      _FieldLabel.required('Name'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _nameCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          decoration: _dec(
+                                            'Name',
+                                            'Enter Name',
+                                          ),
+                                          validator: (v) =>
+                                              _requiredValidator(v, 'Name'),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.required('Email'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _emailCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          decoration: _dec(
+                                            'Email',
+                                            'Enter Email',
+                                          ),
+                                          validator: _emailValidator,
+                                          onChanged: _onEmailChanged,
+                                        ),
+                                      ),
+                                      _buildEmailAvailabilityStatus(),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.required('Date of Birth'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _dateOfBirthCtrl,
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: [
+                                            DateOfBirthTextInputFormatter(),
+                                          ],
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          onChanged: _onDateOfBirthTyped,
+                                          decoration: _dec(
+                                            'Date of Birth',
+                                            'MM/DD/YYYY',
+                                            suffixIcon: IconButton(
+                                              tooltip: 'Pick date of birth',
+                                              onPressed: _pickDateOfBirth,
+                                              icon: const Icon(
+                                                Icons.calendar_today_outlined,
+                                                size: 18,
+                                              ),
+                                            ),
+                                          ),
+                                          validator: _dateOfBirthValidator,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.required('Password'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _passCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          obscureText: _obscure,
+                                          decoration: _dec(
+                                            'Password',
+                                            'Enter Password',
+                                            suffixIcon: IconButton(
+                                              iconSize: 18,
+                                              tooltip: _obscure
+                                                  ? 'Show password'
+                                                  : 'Hide password',
+                                              onPressed: () => setState(
+                                                () => _obscure = !_obscure,
+                                              ),
+                                              icon: Icon(
+                                                _obscure
+                                                    ? Icons.visibility_off
+                                                    : Icons.visibility,
+                                              ),
+                                            ),
+                                          ),
+                                          validator: _passwordValidator,
+                                          onChanged: _onPasswordChanged,
+                                        ),
+                                      ),
+                                      _buildPasswordStatus(),
+                                      const SizedBox(height: 6),
+                                      // ✅ Confirm Password (NEW)
+                                      _FieldLabel.required('Confirm Password'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _confirmPassCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          obscureText: _obscure,
+                                          decoration: _dec(
+                                            'Confirm Password',
+                                            'Re-enter Password',
+                                            suffixIcon: IconButton(
+                                              iconSize: 18,
+                                              tooltip: _obscure
+                                                  ? 'Show password'
+                                                  : 'Hide password',
+                                              onPressed: () => setState(
+                                                () => _obscure = !_obscure,
+                                              ),
+                                              icon: Icon(
+                                                _obscure
+                                                    ? Icons.visibility_off
+                                                    : Icons.visibility,
+                                              ),
+                                            ),
+                                          ),
+                                          validator: _confirmPasswordValidator,
+                                          onChanged: _onConfirmPasswordChanged,
+                                        ),
+                                      ),
+                                      _buildConfirmPasswordStatus(),
+                                      const SizedBox(height: 6),
+                                      _FieldLabel.required('Phone'),
+                                      const SizedBox(height: 6),
+                                      FormField<String>(
+                                        validator: (value) =>
+                                            _phoneValidator(_phoneCtrl.text),
+                                        builder: (field) {
+                                          return Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Container(
+                                                height: _fieldHeight,
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.snow,
+                                                  borderRadius:
+                                                      BorderRadius.zero,
+                                                  border: Border.all(
+                                                    color: AppColors
+                                                        .blackCatBorderLight,
+                                                  ),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 132,
+                                                      child: _countryCodeDropdown(
+                                                        value: _phoneAreaCode,
+                                                        embedded: true,
+                                                        onChanged: (code) => setState(
+                                                          () => _phoneAreaCode =
+                                                              code.dialCode ??
+                                                              '+1',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Container(
+                                                      width: 1,
+                                                      color: AppColors
+                                                          .blackCatBorderLight,
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Semantics(
+                                                        isRequired: true,
+                                                        child: TextFormField(
+                                                          controller:
+                                                              _phoneCtrl,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontSize:
+                                                                    _inputFs,
+                                                                fontFamily:
+                                                                    'Arial',
+                                                              ),
+                                                          keyboardType:
+                                                              TextInputType
+                                                                  .phone,
+                                                          inputFormatters: [
+                                                            FilteringTextInputFormatter
+                                                                .digitsOnly,
+                                                            LengthLimitingTextInputFormatter(
+                                                              10,
+                                                            ),
+                                                            UsPhoneTextInputFormatter(),
+                                                          ],
+                                                          onChanged:
+                                                              field.didChange,
+                                                          decoration: InputDecoration(
+                                                            hintText:
+                                                                'Enter 10-digit phone',
+                                                            hintStyle: TextStyle(
+                                                              fontSize: _hintFs,
+                                                              color: _clientRegBrandInk
+                                                                  .withValues(
+                                                                    alpha: 0.42,
+                                                                  ),
+                                                              fontFamily:
+                                                                  'Arial',
+                                                            ),
+                                                            border: InputBorder
+                                                                .none,
+                                                            enabledBorder:
+                                                                InputBorder
+                                                                    .none,
+                                                            focusedBorder:
+                                                                InputBorder
+                                                                    .none,
+                                                            contentPadding:
+                                                                const EdgeInsets.symmetric(
+                                                                  vertical:
+                                                                      _fieldVerticalPadding,
+                                                                ),
+                                                            isDense: false,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (field.hasError)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        top: 6,
+                                                        left: 4,
+                                                      ),
+                                                  child: Text(
+                                                    field.errorText!,
+                                                    style: const TextStyle(
+                                                      color: Color(0xFFB3261E),
+                                                      fontSize: 10.5,
+                                                      height: 1.1,
+                                                      fontWeight:
+                                                          FontWeight.w400,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          );
+                                        },
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.normal('Instagram'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _instagramCtrl,
+                                        style: const TextStyle(
+                                          fontSize: _inputFs,
+                                          fontFamily: 'Arial',
+                                        ),
+                                        decoration: _dec(
+                                          'Instagram',
+                                          'Enter Instagram',
+                                        ),
+                                        validator: _socialRequiredValidator,
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.normal('TikTok'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _tiktokCtrl,
+                                        style: const TextStyle(
+                                          fontSize: _inputFs,
+                                          fontFamily: 'Arial',
+                                        ),
+                                        decoration: _dec(
+                                          'TikTok',
+                                          'Enter TikTok',
+                                        ),
+                                        validator: _socialRequiredValidator,
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.normal('Bio'),
+                                      const SizedBox(height: 6),
+                                      TextFormField(
+                                        controller: _bioCtrl,
+                                        style: const TextStyle(
+                                          fontSize: _inputFs,
+                                          fontFamily: 'Arial',
+                                        ),
+                                        maxLines: 4,
+                                        decoration: _dec('Bio', 'Enter Bio'),
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
                                   ),
-                                  decoration: _dec('Name', 'Enter Name'),
-                                  validator: (v) =>
-                                      _requiredValidator(v, 'Name'),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
 
-                              _FieldLabel.required('Email'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _emailCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
+                                const SizedBox(height: 6),
+
+                                _SectionCard(
+                                  title: 'Address Information',
+                                  subtitle:
+                                      'Provide your shipping address (required to receive nail sizing kit and custom sets)',
+                                  child: Column(
+                                    children: [
+                                      _FieldLabel.required('Street Address'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _streetCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          decoration: _dec(
+                                            'Street Address',
+                                            'Enter Street Address',
+                                          ),
+                                          onChanged: (_) =>
+                                              _autofillAddressFromStreet(),
+                                          validator: (v) => _requiredValidator(
+                                            v,
+                                            'Street Address',
+                                          ),
+                                        ),
+                                      ),
+                                      if (_streetSuggestionsLoading)
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 8),
+                                          child: LinearProgressIndicator(
+                                            minHeight: 2,
+                                          ),
+                                        ),
+                                      if (_streetSuggestions.isNotEmpty)
+                                        Builder(
+                                          builder: (context) {
+                                            final suggestionCount =
+                                                _streetSuggestions.length;
+                                            final menuHeight =
+                                                AutocompleteDropdownSizing.menuHeight(
+                                                  itemCount: suggestionCount,
+                                                  itemExtent: 40,
+                                                );
+                                            return Container(
+                                              margin: const EdgeInsets.only(
+                                                top: 8,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: _clientRegBodyBg,
+                                                borderRadius: BorderRadius.zero,
+                                                border: Border.all(
+                                                  color: _clientRegBrandInk
+                                                      .withValues(alpha: 0.20),
+                                                ),
+                                              ),
+                                              constraints: BoxConstraints(
+                                                maxHeight: menuHeight,
+                                              ),
+                                              child: ListView.separated(
+                                                shrinkWrap:
+                                                    AutocompleteDropdownSizing.shrinkWrap(
+                                                      suggestionCount,
+                                                    ),
+                                                physics:
+                                                    AutocompleteDropdownSizing.scrollPhysics(
+                                                      suggestionCount,
+                                                    ),
+                                                itemCount: suggestionCount,
+                                                separatorBuilder: (_, _) =>
+                                                    const Divider(height: 1),
+                                                itemBuilder: (_, i) => ListTile(
+                                                  dense: true,
+                                                  title: Text(
+                                                    _streetSuggestions[i]
+                                                        .displayLabel,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  onTap: () =>
+                                                      _selectStreetSuggestion(
+                                                        _streetSuggestions[i],
+                                                      ),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.required('City'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        true,
+                                        TextFormField(
+                                          controller: _cityCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          decoration: _dec(
+                                            'City',
+                                            'Enter City',
+                                          ),
+                                          validator: (v) =>
+                                              _requiredValidator(v, 'City'),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _isUnitedStates
+                                          ? _FieldLabel.required('State')
+                                          : _FieldLabel.normal(
+                                              'State / Region',
+                                            ),
+                                      const SizedBox(height: 6),
+                                      if (_isUnitedStates)
+                                        _typeAheadPicker(
+                                          label: 'State',
+                                          hint: 'Type state',
+                                          options: usStates,
+                                          selectedValue: _selectedState,
+                                          required: true,
+                                          onChanged: (v) => setState(
+                                            () => _selectedState = v,
+                                          ),
+                                          validator: (v) =>
+                                              (v == null || v.trim().isEmpty)
+                                              ? 'State is required'
+                                              : null,
+                                        )
+                                      else
+                                        TextFormField(
+                                          controller: _manualStateCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          decoration: _dec(
+                                            'State / Region',
+                                            'Enter State / Region',
+                                          ),
+                                        ),
+                                      const SizedBox(height: 6),
+
+                                      _isUnitedStates
+                                          ? _FieldLabel.required('Zip Code')
+                                          : _FieldLabel.normal('Zip Code'),
+                                      const SizedBox(height: 6),
+                                      _req(
+                                        _isUnitedStates,
+                                        TextFormField(
+                                          controller: _zipCtrl,
+                                          style: const TextStyle(
+                                            fontSize: _inputFs,
+                                            fontFamily: 'Arial',
+                                          ),
+                                          keyboardType: TextInputType.number,
+                                          inputFormatters: _isUnitedStates
+                                              ? <TextInputFormatter>[
+                                                  FilteringTextInputFormatter
+                                                      .digitsOnly,
+                                                  LengthLimitingTextInputFormatter(
+                                                    5,
+                                                  ),
+                                                ]
+                                              : <TextInputFormatter>[],
+                                          decoration: _dec(
+                                            'Zip Code',
+                                            'Enter Zip Code',
+                                          ),
+                                          validator: _zipValidator,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+
+                                      _FieldLabel.required('Country'),
+                                      const SizedBox(height: 6),
+                                      _typeAheadPicker(
+                                        label: 'Country',
+                                        hint: 'Type country',
+                                        options: countries,
+                                        selectedValue: _selectedCountry,
+                                        required: true,
+                                        onChanged: (v) {
+                                          if (v == null) return;
+                                          setState(() {
+                                            _selectedCountry = v;
+                                            if (_isUnitedStates) {
+                                              _manualStateCtrl.clear();
+                                            } else {
+                                              _selectedState = null;
+                                            }
+                                          });
+                                        },
+                                        validator: (v) =>
+                                            (v == null || v.trim().isEmpty)
+                                            ? 'Country is required'
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 4),
+                                    ],
                                   ),
-                                  keyboardType: TextInputType.emailAddress,
-                                  decoration: _dec('Email', 'Enter Email'),
-                                  validator: _emailValidator,
-                                  onChanged: _onEmailChanged,
                                 ),
-                              ),
-                              _buildEmailAvailabilityStatus(),
-                              const SizedBox(height: 6),
 
-                              _FieldLabel.required('Date of Birth'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _dateOfBirthCtrl,
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: [
-                                    DateOfBirthTextInputFormatter(),
-                                  ],
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
+                                const SizedBox(height: 16),
+                                const SizedBox(height: 6),
+                                PaymentMethodSection(
+                                  initial: _payment,
+                                  onChanged: (updated) =>
+                                      setState(() => _payment = updated),
+                                ),
+
+                                const SizedBox(height: 16),
+                                CommunicationPreferenceSection(
+                                  emailNotifications: _emailNotifications,
+                                  smsNotifications: _smsNotifications,
+                                  onEmailChanged: (value) => setState(
+                                    () => _emailNotifications = value,
                                   ),
-                                  onChanged: _onDateOfBirthTyped,
-                                  decoration: _dec(
-                                    'Date of Birth',
-                                    'MM/DD/YYYY',
-                                    suffixIcon: IconButton(
-                                      tooltip: 'Pick date of birth',
-                                      onPressed: _pickDateOfBirth,
-                                      icon: const Icon(
-                                        Icons.calendar_today_outlined,
-                                        size: 18,
+                                  onSmsChanged: (value) =>
+                                      setState(() => _smsNotifications = value),
+                                ),
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: snow,
+                                    borderRadius: BorderRadius.zero,
+                                    border: Border.all(
+                                      color: AppColors.blackCat.withValues(
+                                        alpha: 0.06,
                                       ),
                                     ),
                                   ),
-                                  validator: _dateOfBirthValidator,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.required('Password'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _passCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  obscureText: _obscure,
-                                  decoration: _dec(
-                                    'Password',
-                                    'Enter Password',
-                                    suffixIcon: IconButton(
-                                      iconSize: 18,
-                                      tooltip: _obscure
-                                          ? 'Show password'
-                                          : 'Hide password',
-                                      onPressed: () =>
-                                          setState(() => _obscure = !_obscure),
-                                      icon: Icon(
-                                        _obscure
-                                            ? Icons.visibility_off
-                                            : Icons.visibility,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: _passwordValidator,
-                                  onChanged: _onPasswordChanged,
-                                ),
-                              ),
-                              _buildPasswordStatus(),
-                              const SizedBox(height: 6),
-                              // ✅ Confirm Password (NEW)
-                              _FieldLabel.required('Confirm Password'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _confirmPassCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  obscureText: _obscure,
-                                  decoration: _dec(
-                                    'Confirm Password',
-                                    'Re-enter Password',
-                                    suffixIcon: IconButton(
-                                      iconSize: 18,
-                                      tooltip: _obscure
-                                          ? 'Show password'
-                                          : 'Hide password',
-                                      onPressed: () =>
-                                          setState(() => _obscure = !_obscure),
-                                      icon: Icon(
-                                        _obscure
-                                            ? Icons.visibility_off
-                                            : Icons.visibility,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: _confirmPasswordValidator,
-                                  onChanged: _onConfirmPasswordChanged,
-                                ),
-                              ),
-                              _buildConfirmPasswordStatus(),
-                              const SizedBox(height: 6),
-                              _FieldLabel.required('Phone'),
-                              const SizedBox(height: 6),
-                              FormField<String>(
-                                validator: (value) =>
-                                    _phoneValidator(_phoneCtrl.text),
-                                builder: (field) {
-                                  return Column(
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        height: _fieldHeight,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.snow,
-                                          borderRadius: BorderRadius.zero,
-                                          border: Border.all(
-                                            color:
-                                                AppColors.blackCatBorderLight,
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 132,
-                                              child: _countryCodeDropdown(
-                                                value: _phoneAreaCode,
-                                                embedded: true,
-                                                onChanged: (code) => setState(
-                                                  () => _phoneAreaCode =
-                                                      code.dialCode ?? '+1',
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              width: 1,
-                                              color:
-                                                  AppColors.blackCatBorderLight,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Semantics(
-                                                isRequired: true,
-                                                child: TextFormField(
-                                                  controller: _phoneCtrl,
-                                                  style: const TextStyle(
-                                                    fontSize: _inputFs,
-                                                    fontFamily: 'Arial',
-                                                  ),
-                                                  keyboardType:
-                                                      TextInputType.phone,
-                                                  inputFormatters: [
-                                                    FilteringTextInputFormatter
-                                                        .digitsOnly,
-                                                    LengthLimitingTextInputFormatter(
-                                                      10,
-                                                    ),
-                                                    UsPhoneTextInputFormatter(),
-                                                  ],
-                                                  onChanged: field.didChange,
-                                                  decoration: InputDecoration(
-                                                    hintText:
-                                                        'Enter 10-digit phone',
-                                                    hintStyle: TextStyle(
-                                                      fontSize: _hintFs,
-                                                      color: _clientRegBrandInk
-                                                          .withValues(
-                                                            alpha: 0.42,
-                                                          ),
-                                                      fontFamily: 'Arial',
-                                                    ),
-                                                    border: InputBorder.none,
-                                                    enabledBorder:
-                                                        InputBorder.none,
-                                                    focusedBorder:
-                                                        InputBorder.none,
-                                                    contentPadding:
-                                                        const EdgeInsets.symmetric(
-                                                          vertical:
-                                                              _fieldVerticalPadding,
-                                                        ),
-                                                    isDense: false,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                          ],
+                                      const Text(
+                                        'Nail Photos',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
                                         ),
                                       ),
-                                      if (field.hasError)
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 6,
-                                            left: 4,
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Capture 2 photos per hand (4 fingers, then thumb). The photos will upload with your client account when you sign up.',
+                                        style: TextStyle(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.72,
                                           ),
-                                          child: Text(
-                                            field.errorText!,
-                                            style: const TextStyle(
-                                              color: Color(0xFFB3261E),
-                                              fontSize: 10.5,
-                                              height: 1.1,
-                                              fontWeight: FontWeight.w400,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Material(
+                                        type: MaterialType.transparency,
+                                        child: CheckboxListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          controlAffinity:
+                                              ListTileControlAffinity.leading,
+                                          value: _consentToStoreNailImages,
+                                          onChanged: (value) => setState(
+                                            () => _consentToStoreNailImages =
+                                                value ?? false,
+                                          ),
+                                          title: const NailPhotoConsentLabel(),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton.icon(
+                                          onPressed:
+                                              _startGuidedNailMeasurement,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: _clientRegBrandInk,
+                                            foregroundColor: AppColors.snow,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.zero,
                                             ),
                                           ),
+                                          icon: const Icon(
+                                            Icons.camera_alt_outlined,
+                                          ),
+                                          label: const Text('Capture Photo'),
                                         ),
+                                      ),
                                     ],
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.normal('Instagram'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _instagramCtrl,
-                                style: const TextStyle(
-                                  fontSize: _inputFs,
-                                  fontFamily: 'Arial',
-                                ),
-                                decoration: _dec(
-                                  'Instagram',
-                                  'Enter Instagram',
-                                ),
-                                validator: _socialRequiredValidator,
-                              ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.normal('TikTok'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _tiktokCtrl,
-                                style: const TextStyle(
-                                  fontSize: _inputFs,
-                                  fontFamily: 'Arial',
-                                ),
-                                decoration: _dec('TikTok', 'Enter TikTok'),
-                                validator: _socialRequiredValidator,
-                              ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.normal('Bio'),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                controller: _bioCtrl,
-                                style: const TextStyle(
-                                  fontSize: _inputFs,
-                                  fontFamily: 'Arial',
-                                ),
-                                maxLines: 4,
-                                decoration: _dec('Bio', 'Enter Bio'),
-                              ),
-                              const SizedBox(height: 4),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        _SectionCard(
-                          title: 'Address Information',
-                          subtitle:
-                              'Provide your shipping address (required to receive nail sizing kit and custom sets)',
-                          child: Column(
-                            children: [
-                              _FieldLabel.required('Street Address'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _streetCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  decoration: _dec(
-                                    'Street Address',
-                                    'Enter Street Address',
-                                  ),
-                                  onChanged: (_) =>
-                                      _autofillAddressFromStreet(),
-                                  validator: (v) =>
-                                      _requiredValidator(v, 'Street Address'),
-                                ),
-                              ),
-                              if (_streetSuggestionsLoading)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 8),
-                                  child: LinearProgressIndicator(minHeight: 2),
-                                ),
-                              if (_streetSuggestions.isNotEmpty)
-                                Builder(
-                                  builder: (context) {
-                                    final suggestionCount =
-                                        _streetSuggestions.length;
-                                    final menuHeight =
-                                        AutocompleteDropdownSizing.menuHeight(
-                                          itemCount: suggestionCount,
-                                          itemExtent: 40,
-                                        );
-                                    return Container(
-                                      margin: const EdgeInsets.only(top: 8),
-                                      decoration: BoxDecoration(
-                                        color: _clientRegBodyBg,
-                                        borderRadius: BorderRadius.zero,
-                                        border: Border.all(
-                                          color: _clientRegBrandInk.withValues(
-                                            alpha: 0.20,
-                                          ),
-                                        ),
-                                      ),
-                                      constraints: BoxConstraints(
-                                        maxHeight: menuHeight,
-                                      ),
-                                      child: ListView.separated(
-                                        shrinkWrap:
-                                            AutocompleteDropdownSizing.shrinkWrap(
-                                              suggestionCount,
-                                            ),
-                                        physics:
-                                            AutocompleteDropdownSizing.scrollPhysics(
-                                              suggestionCount,
-                                            ),
-                                        itemCount: suggestionCount,
-                                        separatorBuilder: (_, _) =>
-                                            const Divider(height: 1),
-                                        itemBuilder: (_, i) => ListTile(
-                                          dense: true,
-                                          title: Text(
-                                            _streetSuggestions[i].displayLabel,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          onTap: () => _selectStreetSuggestion(
-                                            _streetSuggestions[i],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.required('City'),
-                              const SizedBox(height: 6),
-                              _req(
-                                true,
-                                TextFormField(
-                                  controller: _cityCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  decoration: _dec('City', 'Enter City'),
-                                  validator: (v) =>
-                                      _requiredValidator(v, 'City'),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              _isUnitedStates
-                                  ? _FieldLabel.required('State')
-                                  : _FieldLabel.normal('State / Region'),
-                              const SizedBox(height: 6),
-                              if (_isUnitedStates)
-                                _typeAheadPicker(
-                                  label: 'State',
-                                  hint: 'Type state',
-                                  options: usStates,
-                                  selectedValue: _selectedState,
-                                  required: true,
-                                  onChanged: (v) =>
-                                      setState(() => _selectedState = v),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                      ? 'State is required'
-                                      : null,
-                                )
-                              else
-                                TextFormField(
-                                  controller: _manualStateCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  decoration: _dec(
-                                    'State / Region',
-                                    'Enter State / Region',
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                NailPreferencesInlineEditor(
+                                  initial: _nailPrefs,
+                                  showDimensionImages: false,
+                                  onChanged: (updated) =>
+                                      setState(() => _nailPrefs = updated),
+                                ),
+                              ],
                               const SizedBox(height: 6),
 
-                              _isUnitedStates
-                                  ? _FieldLabel.required('Zip Code')
-                                  : _FieldLabel.normal('Zip Code'),
-                              const SizedBox(height: 6),
-                              _req(
-                                _isUnitedStates,
-                                TextFormField(
-                                  controller: _zipCtrl,
-                                  style: const TextStyle(
-                                    fontSize: _inputFs,
-                                    fontFamily: 'Arial',
-                                  ),
-                                  keyboardType: TextInputType.number,
-                                  inputFormatters: _isUnitedStates
-                                      ? <TextInputFormatter>[
-                                          FilteringTextInputFormatter
-                                              .digitsOnly,
-                                          LengthLimitingTextInputFormatter(5),
-                                        ]
-                                      : <TextInputFormatter>[],
-                                  decoration: _dec(
-                                    'Zip Code',
-                                    'Enter Zip Code',
-                                  ),
-                                  validator: _zipValidator,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              _FieldLabel.required('Country'),
-                              const SizedBox(height: 6),
-                              _typeAheadPicker(
-                                label: 'Country',
-                                hint: 'Type country',
-                                options: countries,
-                                selectedValue: _selectedCountry,
-                                required: true,
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  setState(() {
-                                    _selectedCountry = v;
-                                    if (_isUnitedStates) {
-                                      _manualStateCtrl.clear();
-                                    } else {
-                                      _selectedState = null;
-                                    }
-                                  });
-                                },
-                                validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                    ? 'Country is required'
-                                    : null,
-                              ),
-                              const SizedBox(height: 4),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-                        const SizedBox(height: 6),
-                        PaymentMethodSection(
-                          initial: _payment,
-                          onChanged: (updated) =>
-                              setState(() => _payment = updated),
-                        ),
-
-                        const SizedBox(height: 16),
-                        CommunicationPreferenceSection(
-                          emailNotifications: _emailNotifications,
-                          smsNotifications: _smsNotifications,
-                          onEmailChanged: (value) =>
-                              setState(() => _emailNotifications = value),
-                          onSmsChanged: (value) =>
-                              setState(() => _smsNotifications = value),
-                        ),
-                      ] else ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: snow,
-                            borderRadius: BorderRadius.zero,
-                            border: Border.all(
-                              color: AppColors.blackCat.withValues(alpha: 0.06),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Nail Photos',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Capture 2 photos per hand (4 fingers, then thumb). The photos will upload with your client account when you sign up.',
-                                style: TextStyle(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.72,
-                                  ),
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Material(
-                                type: MaterialType.transparency,
-                                child: CheckboxListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  controlAffinity:
-                                      ListTileControlAffinity.leading,
-                                  value: _consentToStoreNailImages,
-                                  onChanged: (value) => setState(
-                                    () => _consentToStoreNailImages =
-                                        value ?? false,
-                                  ),
-                                  title: const NailPhotoConsentLabel(),
-                                ),
-                              ),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _startGuidedNailMeasurement,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _clientRegBrandInk,
-                                    foregroundColor: AppColors.snow,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.zero,
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.camera_alt_outlined),
-                                  label: const Text('Capture Photo'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        NailPreferencesInlineEditor(
-                          initial: _nailPrefs,
-                          showDimensionImages: false,
-                          onChanged: (updated) =>
-                              setState(() => _nailPrefs = updated),
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-
-                      /*if (!_nailPrefs.isComplete) ...[
+                              /*if (!_nailPrefs.isComplete) ...[
                       if (!_kitPurchased)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
@@ -3182,13 +3287,17 @@ class _ClientRegistrationPageState extends State<ClientRegistrationPage>
                         onAddToCart: _startCheckout,
                       ),
                     ],*/
-                      const SizedBox(height: 18),
+                              const SizedBox(height: 18),
 
-                      _wizardNavButtons(canCreate: canCreate),
-                    ],
-                  ),
-                ),
-              ],
+                              _wizardNavButtons(canCreate: canCreate),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -3569,7 +3678,7 @@ class _SectionCard extends StatelessWidget {
           Text(
             subtitle,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: isTabletSize(MediaQuery.sizeOf(context)) ? 14 : 13,
               color: AppColors.blackCat.withValues(alpha: 0.60),
               height: 1.15,
             ),

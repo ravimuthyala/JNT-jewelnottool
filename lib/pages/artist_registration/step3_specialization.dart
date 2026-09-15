@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/direct_request_year_calendar.dart';
+import '../../widgets/responsive_field_row.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -228,84 +229,94 @@ class Step3SpecializationState extends State<Step3Specialization> {
             title: 'Location & Service Area',
             child: Column(
               children: [
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _cityCtrl,
-                  style: const TextStyle(fontSize: kInputFs),
-                  decoration: regDec('City *', 'City'),
-                  validator: (v) {
-                    final val = (v ?? '').trim();
-                    if (val.isEmpty) return 'City is required';
-                    if (!RegExp(r"^[A-Za-z .'-]{2,}$").hasMatch(val)) {
-                      return 'Enter a valid city';
-                    }
-                    return null;
-                  },
-                  ),
-                ),
-                const SizedBox(height: kFieldGap),
-                RegTypeAheadField(
-                  label: 'Country *',
-                  hint: 'Select country',
-                  options: kCountries,
-                  selectedValue: _country,
-                  onChanged: (v) => setState(() {
-                    _country = v ?? 'United States';
-                    if (!_isUS) _state = null;
-                  }),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Country is required' : null,
-                ),
-                const SizedBox(height: kFieldGap),
-                if (_isUS) ...[
-                  RegTypeAheadField(
-                    label: 'State *',
-                    hint: 'Select state',
-                    options: kUsStates,
-                    selectedValue: _state,
-                    onChanged: (v) => setState(() => _state = v),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'State is required' : null,
-                  ),
-                ] else ...[
-                  Semantics(
-                    isRequired: true,
-                    child: TextFormField(
-                    controller: _manualStateCtrl,
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec('State / Region', 'Enter region'),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'State / Region is required'
-                        : null,
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    Semantics(
+                      isRequired: true,
+                      child: TextFormField(
+                        controller: _cityCtrl,
+                        style: const TextStyle(fontSize: kInputFs),
+                        decoration: regDec('City *', 'City'),
+                        validator: (v) {
+                          final val = (v ?? '').trim();
+                          if (val.isEmpty) return 'City is required';
+                          if (!RegExp(r"^[A-Za-z .'-]{2,}$").hasMatch(val)) {
+                            return 'Enter a valid city';
+                          }
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                ],
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  initialValue: _timeZone,
-                  dropdownColor: AppColors.snow,
-                  style: const TextStyle(
-                    fontSize: kInputFs,
-                    color: AppColors.blackCat,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  decoration: regDec('Time Zone *', 'America/New_York'),
-                  items: kTimeZones
-                      .map(
-                        (t) => DropdownMenuItem(
-                          value: t,
-                          child: Text(
-                            t,
-                            style: const TextStyle(
-                              fontSize: kInputFs,
-                              color: AppColors.blackCat,
-                            ),
-                          ),
-                        ),
+                    RegTypeAheadField(
+                      label: 'Country *',
+                      hint: 'Select country',
+                      options: kCountries,
+                      selectedValue: _country,
+                      onChanged: (v) => setState(() {
+                        _country = v ?? 'United States';
+                        if (!_isUS) _state = null;
+                      }),
+                      validator: (v) => (v == null || v.isEmpty)
+                          ? 'Country is required'
+                          : null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: kFieldGap),
+                ResponsiveFieldRow(
+                  gap: 6,
+                  fields: [
+                    if (_isUS)
+                      RegTypeAheadField(
+                        label: 'State *',
+                        hint: 'Select state',
+                        options: kUsStates,
+                        selectedValue: _state,
+                        onChanged: (v) => setState(() => _state = v),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'State is required'
+                            : null,
                       )
-                      .toList(),
-                  onChanged: (v) => setState(() => _timeZone = v ?? _timeZone),
+                    else
+                      Semantics(
+                        isRequired: true,
+                        child: TextFormField(
+                          controller: _manualStateCtrl,
+                          style: const TextStyle(fontSize: kInputFs),
+                          decoration: regDec('State / Region', 'Enter region'),
+                          validator: (v) => (v == null || v.trim().isEmpty)
+                              ? 'State / Region is required'
+                              : null,
+                        ),
+                      ),
+                    DropdownButtonFormField<String>(
+                      initialValue: _timeZone,
+                      dropdownColor: AppColors.snow,
+                      style: const TextStyle(
+                        fontSize: kInputFs,
+                        color: AppColors.blackCat,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      decoration: regDec('Time Zone *', 'America/New_York'),
+                      items: kTimeZones
+                          .map(
+                            (t) => DropdownMenuItem(
+                              value: t,
+                              child: Text(
+                                t,
+                                style: const TextStyle(
+                                  fontSize: kInputFs,
+                                  color: AppColors.blackCat,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _timeZone = v ?? _timeZone),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -287,7 +287,7 @@ class GroupClientMeasurementsTabs extends StatelessWidget {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,

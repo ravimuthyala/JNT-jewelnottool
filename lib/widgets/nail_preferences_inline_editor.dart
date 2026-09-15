@@ -487,10 +487,10 @@ class _NailPreferencesInlineEditorState
             Semantics(
               sortKey: const OrdinalSortKey(2),
               label:
-                  'NFC eligible designs marked with this checkbox can be upgraded with an NFC chip',
+                  'JNT Tap eligible designs marked with this checkbox can be upgraded with a JNT Tap chip',
               child: ExcludeSemantics(
                 child: Text(
-                  'NFC Eligible Designs marked with this checkbox can be upgraded with an NFC chip',
+                  'JNT Tap Eligible Designs marked with this checkbox can be upgraded with a JNT Tap chip',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
@@ -902,7 +902,7 @@ class _FingerRow extends StatelessWidget {
               semanticLabel: f.semanticLabel,
               nfcSemanticLabel: f.semanticLabel.replaceFirst(
                 ' nail dimension in millimeters',
-                ' NFC chip checkbox',
+                ' JNT Tap chip checkbox',
               ),
               controller: f.controller,
               focusNode: f.focusNode,
@@ -1100,7 +1100,7 @@ class _FingerInput extends StatelessWidget {
                       ),
                       const SizedBox(width: 1),
                       const Text(
-                        'NFC',
+                        'JNT Tap',
                         style: TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w700,

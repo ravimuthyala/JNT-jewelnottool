@@ -1,11 +1,20 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace = "com.example.jewelnottool"
+    namespace = "com.jntnail.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,10 +24,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.jewelnottool"
+        applicationId = "com.jntnail.app"
 
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -57,10 +66,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Keep your existing signing behavior unchanged for now.
-            signingConfig = signingConfigs.getByName("debug")
+            // Falls back to the debug key only if key.properties is missing
+            // (e.g. a fresh checkout before the keystore has been set up).
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

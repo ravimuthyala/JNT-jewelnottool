@@ -48,6 +48,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android release signing secrets -- never commit these
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
+
 device-logcat.txt
 
 # Graphify knowledge graph output

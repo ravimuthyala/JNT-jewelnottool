@@ -424,3 +424,10 @@ enabled = true
 # present a Supabase auth JWT. Authenticity is instead checked via the
 # x-webhook-secret header against the AI_ASSISTANT_WEBHOOK_SECRET secret.
 verify_jwt = false
+
+# Not deployed yet -- see supabase/functions/shippo-webhook/index.ts header
+# for activation steps. Uncomment once that function is deployed: Shippo
+# calls this endpoint directly and cannot present a Supabase auth JWT,
+# same as ai-chat-assistant above.
+# [functions.shippo-webhook]
+# verify_jwt = false

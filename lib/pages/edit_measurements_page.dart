@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../models/client_profile_models.dart';
 import '../services/edit_profile_supabase_save.dart';
 import '../widgets/nail_preferences_inline_editor.dart';
@@ -47,6 +48,7 @@ class _EditMeasurementsPopupState extends State<EditMeasurementsPopup> {
   Widget build(BuildContext context) {
     final topInset = MediaQuery.of(context).padding.top;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
     return Semantics(
       scopesRoute: true,
@@ -64,7 +66,12 @@ class _EditMeasurementsPopupState extends State<EditMeasurementsPopup> {
               borderRadius: BorderRadius.zero,
             ),
             child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(16, topInset > 0 ? 8 : 10, 16, 18),
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                topInset > 0 ? 8 : 10,
+                isTablet ? 24 : 16,
+                18,
+              ),
               child: FocusTraversalGroup(
                 policy: OrderedTraversalPolicy(),
                 child: Column(

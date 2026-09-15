@@ -15,6 +15,7 @@ import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
 import '../widgets/group_client_measurements_tabs.dart';
 import '../widgets/request_modal_accessibility.dart';
+import '../utlis/responsive_layout.dart';
 
 Future<void> showDeliveredRequestSheet({
   required BuildContext context,
@@ -23,6 +24,10 @@ Future<void> showDeliveredRequestSheet({
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _DeliveredRequestSheet(request: request),
   );
@@ -351,6 +356,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final sheetMediaQuery = MediaQuery.of(context);
 
     return Semantics(
@@ -387,7 +393,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                     Expanded(
                       child: ListView(
                         controller: _sheetScrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        padding: EdgeInsets.fromLTRB(
+                          isTablet ? 24 : 16,
+                          8,
+                          isTablet ? 24 : 16,
+                          16,
+                        ),
                         children: [
                           _topHero(context),
                           _infoChips(),
@@ -404,7 +415,12 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+                      padding: EdgeInsets.fromLTRB(
+                        isTablet ? 24 : 16,
+                        10,
+                        isTablet ? 24 : 16,
+                        20,
+                      ),
                       child: Center(
                         child: SizedBox(
                           height: 52,
@@ -647,7 +663,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
               Expanded(
                 child: segment(
                   icon: Icons.nfc_rounded,
-                  text: 'NFC',
+                  text: 'JNT Tap',
                   alignment: Alignment.center,
                 ),
               ),
@@ -1657,7 +1673,7 @@ class _DeliveredRequestSheetState extends State<_DeliveredRequestSheet> {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,

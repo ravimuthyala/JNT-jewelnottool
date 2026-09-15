@@ -1,18 +1,74 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/semantics.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../constants/profile_table_columns.dart';
 import '../theme/app_colors.dart';
 import '../utils/date_format_utils.dart';
+import '../utlis/responsive_layout.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import 'request_chat_page.dart';
 import 'track_order_page.dart';
+
+
+/// Shared heading wrapper for visible section titles. The visible Text is
+/// excluded so TalkBack gets one clean heading stop rather than a duplicate
+/// text node plus a semantics wrapper.
+class _A11yHeading extends StatelessWidget {
+  const _A11yHeading(
+    this.text, {
+    this.fontSize = 16,
+    this.fontFamily,
+  }) : textAlign = null;
+
+  final String text;
+  final double fontSize;
+  final String? fontFamily;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      label: text,
+      child: ExcludeSemantics(
+        child: Text(
+          text,
+          textAlign: textAlign,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: fontSize,
+            fontFamily: fontFamily,
+            color: AppColors.blackCat,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _a11yIdentifier(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty || trimmed == '-') return 'not available';
+  final parts = <String>[];
+  for (final rune in trimmed.runes) {
+    final char = String.fromCharCode(rune);
+    if (char == '-') {
+      parts.add('dash');
+    } else if (char == '/') {
+      parts.add('slash');
+    } else if (char.trim().isNotEmpty) {
+      parts.add(char);
+    }
+  }
+  return parts.join(' ');
+}
 
 /// If you already have this model elsewhere, you can delete this class
 /// and import the correct model file instead.
@@ -45,6 +101,9 @@ class _OrderSafe {
   final String paymentLink;
   final bool openToClientPool;
   final String selectedClientName;
+  final String acceptedByClientEmail;
+  final String acceptedClientName;
+  final String clientResponseStatus;
   final String selectedArtistName;
   final DateTime? paidAt;
   final List<String> artistCompletedPhotos;
@@ -71,6 +130,8 @@ class _OrderSafe {
   final String trackingNumber;
   final DateTime? shippedAt;
   final DateTime? deliveredAt;
+  final bool nfcRequested;
+  final Map<String, dynamic> brandCollaboration;
 
   const _OrderSafe({
     required this.sourceCollection,
@@ -99,6 +160,9 @@ class _OrderSafe {
     required this.paymentLink,
     required this.openToClientPool,
     required this.selectedClientName,
+    this.acceptedByClientEmail = '',
+    this.acceptedClientName = '',
+    this.clientResponseStatus = '',
     required this.selectedArtistName,
     required this.paidAt,
     required this.artistCompletedPhotos,
@@ -125,6 +189,8 @@ class _OrderSafe {
     required this.trackingNumber,
     required this.shippedAt,
     required this.deliveredAt,
+    this.nfcRequested = false,
+    this.brandCollaboration = const {},
   });
 
   static _OrderSafe from(dynamic o) {
@@ -187,19 +253,6 @@ class _OrderSafe {
       return const <String>[];
     }
 
-    String dateDisplayFrom(List<Object?> values) {
-      for (final value in values) {
-        final raw = (value ?? '').toString().trim();
-        if (raw.isEmpty) continue;
-        final parsed = dt(value) ?? DateTime.tryParse(raw);
-        if (parsed != null) {
-          return '${parsed.month.toString().padLeft(2, '0')}/${parsed.day.toString().padLeft(2, '0')}/${parsed.year}';
-        }
-        return raw;
-      }
-      return '';
-    }
-
     List<String> collectPhotoRefs(List<dynamic> values) {
       final out = <String>[];
       final seen = <String>{};
@@ -207,8 +260,7 @@ class _OrderSafe {
         if (value == null) return;
         if (value is String) {
           final s = value.trim();
-          if (_SubmittedPhotosStrip._isUsablePhotoRef(s) && seen.add(s))
-            out.add(s);
+          if (s.isNotEmpty && seen.add(s)) out.add(s);
           return;
         }
         if (value is Iterable) {
@@ -311,42 +363,33 @@ class _OrderSafe {
         o?.inspirationPhotos,
         payloadMap?['brandInspirationPhotos'],
         payloadMap?['inspirationPhotos'],
+        payloadMap?['clientImages'],
+        payloadMap?['photos'],
         payloadMap?['inspirationPhoto'],
         payloadMap?['inspirationPhotoUrl'],
+        payloadMap?['previewImage'],
+        payloadMap?['previewImageAsset'],
         requestDetailsMap?['brandInspirationPhotos'],
         requestDetailsMap?['inspirationPhotos'],
+        requestDetailsMap?['clientImages'],
+        requestDetailsMap?['photos'],
         requestDetailsMap?['inspirationPhoto'],
         requestDetailsMap?['inspirationPhotoUrl'],
         requestDetailsMap?['inspirationPhotoUrls'],
         requestDetailsMap?['inspirationPhotoRefs'],
+        requestDetailsMap?['previewImage'],
+        requestDetailsMap?['previewImageAsset'],
         orderMap?['brandInspirationPhotos'],
         orderMap?['inspirationPhotos'],
+        orderMap?['clientImages'],
+        orderMap?['photos'],
         orderMap?['inspirationPhoto'],
         orderMap?['inspirationPhotoUrl'],
+        orderMap?['previewImage'],
+        orderMap?['previewImageAsset'],
       ]),
       needByDisplay: s(o?.needByDisplay, ''),
-      jntRevealDateDisplay: dateDisplayFrom(<Object?>[
-        tryRead(() => (o as dynamic).jntRevealDateDisplay),
-        tryRead(() => (o as dynamic).jntRevealDate),
-        tryRead(() => (o as dynamic).jntRevealDateValue),
-        tryRead(() => (o as dynamic).revealDate),
-        (o is Map ? o['jnt_reveal_date'] : null),
-        (o is Map ? o['jntRevealDate'] : null),
-        (o is Map ? o['jnt_reveal_date_display'] : null),
-        (o is Map ? o['jntRevealDateDisplay'] : null),
-        payloadMap?['jntRevealDate'],
-        payloadMap?['jnt_reveal_date'],
-        payloadMap?['revealDate'],
-        payloadMap?['jntRevealDateDisplay'],
-        requestDetailsMap?['jntRevealDate'],
-        requestDetailsMap?['jnt_reveal_date'],
-        requestDetailsMap?['revealDate'],
-        requestDetailsMap?['jntRevealDateDisplay'],
-        orderMap?['jntRevealDate'],
-        orderMap?['jnt_reveal_date'],
-        orderMap?['revealDate'],
-        orderMap?['jntRevealDateDisplay'],
-      ]),
+      jntRevealDateDisplay: s(o?.jntRevealDateDisplay, ''),
       nailShape: s(o?.nailShape, ''),
       nailLength: s(o?.nailLength, ''),
       budgetMin: o?.budgetMin is int ? o.budgetMin as int : null,
@@ -379,6 +422,24 @@ class _OrderSafe {
             payloadMap?['selectedClient'] ??
             orderMap?['selectedClientName'] ??
             orderMap?['selectedClient'],
+        '',
+      ),
+      acceptedByClientEmail: s(
+        tryRead(() => (o as dynamic).acceptedByClientEmail) ??
+            payloadMap?['acceptedByClientEmail'] ??
+            orderMap?['acceptedByClientEmail'],
+        '',
+      ),
+      acceptedClientName: s(
+        tryRead(() => (o as dynamic).acceptedClientName) ??
+            payloadMap?['acceptedClientName'] ??
+            orderMap?['acceptedClientName'],
+        '',
+      ),
+      clientResponseStatus: s(
+        tryRead(() => (o as dynamic).clientResponseStatus) ??
+            payloadMap?['clientResponseStatus'] ??
+            orderMap?['clientResponseStatus'],
         '',
       ),
       selectedArtistName: s(
@@ -432,6 +493,15 @@ class _OrderSafe {
       trackingNumber: s(o?.trackingNumber, ''),
       shippedAt: dt(o?.shippedAt),
       deliveredAt: dt(o?.deliveredAt),
+      nfcRequested: tryRead(() => (o as dynamic).nfcRequested) == true,
+      // `o` is normally a typed ClientOrder (dot-notation getter), not a
+      // raw Map -- the `o['details']`-based detailMap above is null in
+      // that case, so try the typed field first and only fall back to
+      // the map-based path if `o` really is a raw row somewhere.
+      brandCollaboration: asMap(
+        tryRead(() => (o as dynamic).brandCollaboration) ??
+            detailMap?['brandCollaboration'],
+      ),
     );
   }
 
@@ -728,6 +798,42 @@ Future<Map<String, dynamic>?> _supabaseFetchClientRowByEmail(
   return null;
 }
 
+class _NfcRequestTag extends StatelessWidget {
+  const _NfcRequestTag();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'NFC request',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: AppColors.balletSlippers,
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.nfc_rounded, size: 12, color: AppColors.blackCat),
+            const SizedBox(width: 4),
+            ExcludeSemantics(
+              child: Text(
+                'NFC request',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 10,
+                  color: AppColors.blackCat,
+                  fontFamily: 'Arial',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _OrderGroupClient {
   const _OrderGroupClient({
     this.clientId = '',
@@ -748,6 +854,287 @@ class _OrderGroupClient {
   final String nailLength;
   final Map<String, String> leftHandDimensions;
   final Map<String, String> rightHandDimensions;
+}
+
+/// Bottom sheet letting a brand pick which recipient of a group order to
+/// chat with -- each recipient has their own separate thread (see
+/// _BaseOrderDetails._openClientChatWith's conversationSuffix). Only
+/// accepted recipients are chattable; pending/declined ones are shown for
+/// context but disabled.
+class _GroupClientChatPickerSheet extends StatelessWidget {
+  const _GroupClientChatPickerSheet({
+    required this.clients,
+    required this.requestId,
+    required this.myEmail,
+    required this.onSelect,
+  });
+
+  final List<_OrderGroupClient> clients;
+
+  /// Needed to compute each row's own conversation id (same suffix scheme
+  /// as _openClientChatWith) so an unread dot can be shown against the
+  /// exact recipient it's from, not just "this order has something new."
+  final String requestId;
+  final String myEmail;
+  final ValueChanged<_OrderGroupClient> onSelect;
+
+  /// Mirrors _BaseOrderDetails._openClientChatWith's id scheme -- brand
+  /// never gets the unsuffixed thread, every recipient has their own.
+  String _conversationIdFor(_OrderGroupClient client) {
+    final email = client.clientEmail.trim().toLowerCase();
+    final threadKey = (client.clientId.trim().isNotEmpty
+            ? client.clientId.trim()
+            : email)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return buildChatConversationId(
+      requestId,
+      conversationSuffix: 'brand_client_$threadKey',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      explicitChildNodes: true,
+      namesRoute: true,
+      label: 'Select a client to chat with',
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 480),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+            decoration: const BoxDecoration(
+              color: AppColors.snow,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.blackCatBorderLight,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                const Text(
+                  'Select a client to chat with',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Each recipient has their own separate thread.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.blackCat.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  child: StreamBuilder<List<ChatNotificationRef>>(
+                    stream: myEmail.isEmpty
+                        ? const Stream<List<ChatNotificationRef>>.empty()
+                        : NotificationsService.watchUnreadChatConversationRefs(
+                            receiverEmail: myEmail,
+                          ),
+                    builder: (context, snapshot) {
+                      final unreadConversationIds = (snapshot.data ?? const [])
+                          .where((r) => r.requestId == requestId)
+                          .map((r) => r.conversationId)
+                          .toSet();
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: clients.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final client = clients[index];
+                          return _clientRow(
+                            client,
+                            hasUnread: unreadConversationIds.contains(
+                              _conversationIdFor(client),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _clientRow(_OrderGroupClient client, {required bool hasUnread}) {
+    final status = client.responseStatus.trim().toLowerCase();
+    final isAccepted = status == 'accepted';
+    final name = client.clientName.trim().isEmpty
+        ? 'Client'
+        : client.clientName.trim();
+    final email = client.clientEmail.trim();
+    final letter = name.isNotEmpty ? name[0].toUpperCase() : 'C';
+
+    final Color pillBg;
+    final Color pillFg;
+    final String pillLabel;
+    switch (status) {
+      case 'accepted':
+        pillBg = const Color(0xFFDBF4E6);
+        pillFg = const Color(0xFF1E8E5A);
+        pillLabel = 'Accepted';
+      case 'declined':
+      case 'rejected':
+        pillBg = const Color(0xFFF3DCDC);
+        pillFg = const Color(0xFFA6453E);
+        pillLabel = 'Declined';
+      default:
+        pillBg = AppColors.alabaster;
+        pillFg = AppColors.blackCatLight;
+        pillLabel = 'Pending';
+    }
+
+    return Opacity(
+      opacity: isAccepted ? 1 : 0.6,
+      child: Semantics(
+        button: isAccepted,
+        label: isAccepted
+            ? hasUnread
+                  ? 'Chat with $name, unread message'
+                  : 'Chat with $name'
+            : '$name, $pillLabel, chat not available yet',
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: isAccepted ? () => onSelect(client) : null,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 44),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.blackCatBorderLight),
+              ),
+              child: Row(
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: AppColors.balletSlippers,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          letter,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                      ),
+                      if (hasUnread)
+                        Positioned(
+                          top: -2,
+                          right: -2,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE85656),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.snow,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.blackCat,
+                          ),
+                        ),
+                        if (email.isNotEmpty)
+                          Text(
+                            email,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.blackCat.withValues(alpha: 0.55),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pillBg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      pillLabel,
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: pillFg,
+                      ),
+                    ),
+                  ),
+                  if (isAccepted) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: const BoxDecoration(
+                        color: AppColors.blackCat,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 14,
+                        color: AppColors.snow,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// ------------------------
@@ -942,71 +1329,98 @@ class _BaseOrderDetails extends StatelessWidget {
     if (email.isEmpty) return fallback;
     final client = Supabase.instance.client;
 
-    for (final collection in const <String>['artist', 'client_artist']) {
-      final rows = await client
-          .from(collection)
-          .select(columnsForProfileTable(collection) ?? '*')
-          .eq('email', email)
-          .limit(1);
-      if (rows.isEmpty) continue;
+    try {
+      for (final collection in const <String>['artist', 'client_artist']) {
+        final rows = await client
+            .from(collection)
+            .select(columnsForProfileTable(collection) ?? '*')
+            .eq('email', email)
+            .limit(1);
+        if (rows.isEmpty) continue;
 
-      final data = Map<String, dynamic>.from(rows.first as Map);
-      final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
-      final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
-      final address = (data['address'] as Map<String, dynamic>?) ?? const {};
-      final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
+        final data = Map<String, dynamic>.from(rows.first as Map);
+        final profile = (data['profile'] as Map<String, dynamic>?) ?? const {};
+        final basic = (data['basic'] as Map<String, dynamic>?) ?? const {};
+        final address = (data['address'] as Map<String, dynamic>?) ?? const {};
+        final stats = (data['stats'] as Map<String, dynamic>?) ?? const {};
 
-      final name = _firstNonEmpty([
-        order.artistName,
-        profile['displayName'],
-        profile['name'],
-        basic['displayName'],
-        basic['name'],
-        data['panel_displayName'],
-        data['displayName'],
-        data['name'],
-      ]);
-      final image = _firstNonEmpty([
-        order.artistProfileImage,
-        profile['profileImageUrl'],
-        profile['avatarUrl'],
-        profile['profileImagePath'],
-        basic['profileImageUrl'],
-        basic['avatarUrl'],
-        data['panel_profileImageUrl'],
-        data['panel_profile_image_url'],
-        data['profileImageUrl'],
-        data['profile_image_url'],
-        data['avatarUrl'],
-        data['avatar_url'],
-      ]);
-      final city = _firstNonEmpty([
-        address['city'],
-        profile['city'],
-        data['panel_city'],
-        data['city'],
-      ]);
-      final state = _firstNonEmpty([
-        address['state'],
-        profile['state'],
-        data['panel_state'],
-        data['state'],
-      ]);
-      final rating = _asDouble(stats['rating']) ?? _asDouble(data['rating']);
+        final name = _firstNonEmpty([
+          order.artistName,
+          profile['displayName'],
+          profile['name'],
+          basic['displayName'],
+          basic['name'],
+          data['panel_displayName'],
+          data['displayName'],
+          data['name'],
+        ]);
+        final image = _firstNonEmpty([
+          order.artistProfileImage,
+          profile['profileImageUrl'],
+          profile['avatarUrl'],
+          profile['profileImagePath'],
+          basic['profileImageUrl'],
+          basic['avatarUrl'],
+          data['panel_profileImageUrl'],
+          data['panel_profile_image_url'],
+          data['profileImageUrl'],
+          data['profile_image_url'],
+          data['avatarUrl'],
+          data['avatar_url'],
+        ]);
+        final city = _firstNonEmpty([
+          address['city'],
+          profile['city'],
+          data['panel_city'],
+          data['city'],
+        ]);
+        final state = _firstNonEmpty([
+          address['state'],
+          profile['state'],
+          data['panel_state'],
+          data['state'],
+        ]);
+        final rating = _asDouble(stats['rating']) ?? _asDouble(data['rating']);
 
-      return _AcceptedArtistMeta(
-        name: name,
-        profileImage: image,
-        city: city,
-        state: state,
-        rating: rating,
-      );
+        return _AcceptedArtistMeta(
+          name: name,
+          profileImage: image,
+          city: city,
+          state: state,
+          rating: rating,
+        );
+      }
+    } catch (e) {
+      debugPrint('[BrandOrderDetails] failed to load accepted artist meta: $e');
     }
 
     return fallback;
   }
 
-  void _openAiSupportChat(BuildContext context) {
+  bool get _isGroupOrder =>
+      order.orderType.trim().toLowerCase() == 'group' ||
+      order.groupClients.isNotEmpty;
+
+  /// Brand's own display name to use as the "me" side of the chat --
+  /// [showRequestChatModal] resolves the peer as "whichever of
+  /// clientEmail/artistEmail isn't the signed-in user," so the brand's own
+  /// identity has to be one of the two slots for that to work.
+  String get _brandDisplayName {
+    final currentName = _currentName.trim();
+    if (currentName.isNotEmpty) return currentName;
+    final email = _currentEmail.trim();
+    return email.contains('@') ? email.split('@').first : 'Brand';
+  }
+
+  /// Opens a chat with the actual client on this order -- a single direct
+  /// thread for a single-client order, or a picker (one thread per
+  /// recipient) for a group order.
+  void _openClientChat(BuildContext context) {
+    if (_isGroupOrder) {
+      _openGroupClientChatPicker(context);
+      return;
+    }
+
     final clientEmail = order.clientEmail.trim().toLowerCase();
     if (clientEmail.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1014,21 +1428,71 @@ class _BaseOrderDetails extends StatelessWidget {
       );
       return;
     }
-    final currentName = _currentName.trim();
-    final fallbackCurrentName = _currentEmail.trim();
-    final clientName = currentName.isNotEmpty
-        ? currentName
-        : (fallbackCurrentName.contains('@')
-              ? fallbackCurrentName.split('@').first
-              : 'Client');
+    final displayName = _requestedClientDisplay();
+    final clientName = (displayName == 'N/A' || displayName == 'Group')
+        ? (clientEmail.contains('@') ? clientEmail.split('@').first : 'Client')
+        : displayName;
+
     showRequestChatModal(
       context: context,
       requestId: order.id,
-      conversationSuffix: 'ai_support',
-      clientEmail: clientEmail,
-      artistEmail: 'ai.chatbot@jnt.com',
-      clientName: clientName,
-      artistName: 'JNT AI Assistant',
+      conversationSuffix: 'brand_client',
+      clientEmail: _currentEmail,
+      artistEmail: clientEmail,
+      clientName: _brandDisplayName,
+      artistName: clientName,
+    );
+  }
+
+  void _openGroupClientChatPicker(BuildContext context) {
+    final chattable = order.groupClients
+        .where((c) => c.clientEmail.trim().isNotEmpty)
+        .toList(growable: false);
+
+    if (chattable.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No recipients available to chat with yet.'),
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _GroupClientChatPickerSheet(
+        clients: chattable,
+        requestId: order.id,
+        myEmail: _currentEmail,
+        onSelect: (client) {
+          Navigator.of(sheetContext).pop();
+          _openClientChatWith(context, client);
+        },
+      ),
+    );
+  }
+
+  void _openClientChatWith(BuildContext context, _OrderGroupClient client) {
+    final clientEmail = client.clientEmail.trim().toLowerCase();
+    final clientName = client.clientName.trim().isNotEmpty
+        ? client.clientName.trim()
+        : (clientEmail.contains('@') ? clientEmail.split('@').first : 'Client');
+    final threadKey = (client.clientId.trim().isNotEmpty
+            ? client.clientId.trim()
+            : clientEmail)
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+
+    showRequestChatModal(
+      context: context,
+      requestId: order.id,
+      conversationSuffix: 'brand_client_$threadKey',
+      clientEmail: _currentEmail,
+      artistEmail: clientEmail,
+      clientName: _brandDisplayName,
+      artistName: clientName,
     );
   }
 
@@ -1095,6 +1559,7 @@ class _BaseOrderDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final isSubmittedStatus =
         statusPillText == 'Pending' || statusPillText == 'In Review';
     final isCancelledStatus = statusPillText == 'Cancelled';
@@ -1108,669 +1573,767 @@ class _BaseOrderDetails extends StatelessWidget {
 
     return Semantics(
       scopesRoute: true,
-      namesRoute: true,
       explicitChildNodes: true,
+      namesRoute: true,
       label: 'Brand order details',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntModalAppBar(
-        onClose: () => Navigator.pop(context),
-        closeTooltip: 'Close brand order details',
-        closeIcon: const Icon(Icons.close_rounded, size: 26),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 18),
-        children: [
-          if (isCancelledStatus) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: AppColors.blackCat,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
-                    style: TextStyle(
-                      color: AppColors.blackCat,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25,
-                    ),
-                  ),
-                ),
-              ],
+        backgroundColor: AppColors.snow,
+        appBar: JntModalAppBar(
+          onClose: () => Navigator.pop(context),
+          closeTooltip: 'Close brand order details',
+          closeIcon: const Icon(Icons.close_rounded, size: 26),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 1000 : double.infinity,
             ),
-            const SizedBox(height: 16),
-          ],
-          Row(
-            children: [
-              Text(
-                'Placed on: ${_placedOnText()}',
-                style: TextStyle(
-                  color: AppColors.blackCat,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                  fontFamily: 'ArialBold',
-                ),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                6,
+                isTablet ? 24 : 16,
+                18,
               ),
-              const Spacer(),
-              Text(
-                statusPillText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          if (isSubmittedStatus)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 18,
-                  color: AppColors.blackCat.withValues(alpha: 0.60),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.60),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      height: 1.25,
+            if (isCancelledStatus) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 16,
+                    color: AppColors.blackCat,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Cancelled: This order has been cancelled. If you were charged, refund will be processed.',
+                      style: TextStyle(
+                        color: AppColors.blackCat,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1.25,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            )
-          else
-            const SizedBox.shrink(),
-
-          if (isSubmittedStatus && _showDirectClientDeclinedBanner) ...[
-            const SizedBox(height: 12),
-            _directClientDeclinedBanner(),
-          ] else if (isSubmittedStatus && _showDirectArtistDeclinedBanner) ...[
-            const SizedBox(height: 12),
-            _directArtistDeclinedBanner(),
-          ] else if (!isSubmittedStatus && !isClosedHistoryStatus)
-            _Card(
-              child: FutureBuilder<_AcceptedArtistMeta>(
-                future: acceptedArtistMetaFuture,
-                builder: (context, snapshot) {
-                  final meta =
-                      snapshot.data ??
-                      _AcceptedArtistMeta(
-                        name: order.artistName.trim(),
-                        profileImage: order.artistProfileImage.trim(),
-                      );
-                  final displayName = meta.name.trim().isEmpty
-                      ? 'Artist'
-                      : meta.name.trim();
-                  final rating = meta.rating;
-                  final location = [
-                    meta.city.trim(),
-                    meta.state.trim(),
-                  ].where((e) => e.isNotEmpty).join(', ');
-
-                  return Row(
-                    children: [
-                      Container(
-                        height: 48,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: AppColors.blackCat.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _artistAvatarWithFallback(
-                          name: displayName,
-                          raw: meta.profileImage,
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            Semantics(
+              container: true,
+              explicitChildNodes: true,
+              child: Row(
+                children: [
+                  Semantics(
+                    label: 'Placed on ${_placedOnText()}',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        'Placed on: ${_placedOnText()}',
+                        style: TextStyle(
+                          color: AppColors.blackCat,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                          fontFamily: 'ArialBold',
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              displayName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
+                    ),
+                  ),
+                  const Spacer(),
+                  Semantics(
+                    label: 'Order status, $statusPillText',
+                    child: ExcludeSemantics(
+                      child: Text(
+                        statusPillText,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: AppColors.blackCat,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (order.nfcRequested) ...[
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: _NfcRequestTag(),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+
+            if (isSubmittedStatus)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: AppColors.blackCat.withValues(alpha: 0.60),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Artist is not assigned yet. Once your submitted request is accepted, artist details and messaging will appear here.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.60),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            else
+              const SizedBox.shrink(),
+
+            if (isSubmittedStatus && _showDirectClientDeclinedBanner) ...[
+              const SizedBox(height: 12),
+              _directClientDeclinedBanner(),
+            ] else if (isSubmittedStatus &&
+                _showDirectArtistDeclinedBanner) ...[
+              const SizedBox(height: 12),
+              _directArtistDeclinedBanner(),
+            ] else if (!isSubmittedStatus && !isClosedHistoryStatus)
+              _Card(
+                child: FutureBuilder<_AcceptedArtistMeta>(
+                  future: acceptedArtistMetaFuture,
+                  builder: (context, snapshot) {
+                    final meta =
+                        snapshot.data ??
+                        _AcceptedArtistMeta(
+                          name: order.artistName.trim(),
+                          profileImage: order.artistProfileImage.trim(),
+                        );
+                    final displayName = meta.name.trim().isEmpty
+                        ? 'Artist'
+                        : meta.name.trim();
+                    final rating = meta.rating;
+                    final location = [
+                      meta.city.trim(),
+                      meta.state.trim(),
+                    ].where((e) => e.isNotEmpty).join(', ');
+
+                    final artistSummary = <String>[
+                      'Artist assigned to your request',
+                      displayName,
+                      if (rating != null) '${rating.toStringAsFixed(1)} rating',
+                      if (location.isNotEmpty) location,
+                    ].join(', ');
+
+                    return Semantics(
+                      label: artistSummary,
+                      child: ExcludeSemantics(
+                        child: Row(
+                      children: [
+                        Container(
+                          height: 48,
+                          width: 48,
+                          decoration: BoxDecoration(
+                            color: AppColors.blackCat.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: _artistAvatarWithFallback(
+                            name: displayName,
+                            raw: meta.profileImage,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                displayName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
                               ),
-                            ),
-                            if (rating != null || location.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  if (rating != null) ...[
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 18,
-                                      color: AppColors.alabaster,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      rating.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w400,
-                                        color: AppColors.blackCat.withValues(
-                                          alpha: 0.85,
-                                        ),
+                              if (rating != null || location.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    if (rating != null) ...[
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 18,
+                                        color: AppColors.alabaster,
                                       ),
-                                    ),
-                                  ],
-                                  if (rating != null &&
-                                      location.isNotEmpty) ...[
-                                    const SizedBox(width: 10),
-                                  ],
-                                  if (location.isNotEmpty)
-                                    Flexible(
-                                      child: Text(
-                                        location,
-                                        overflow: TextOverflow.ellipsis,
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        rating.toStringAsFixed(1),
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w400,
                                           color: AppColors.blackCat.withValues(
-                                            alpha: 0.55,
+                                            alpha: 0.85,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                ],
+                                    ],
+                                    if (rating != null &&
+                                        location.isNotEmpty) ...[
+                                      const SizedBox(width: 10),
+                                    ],
+                                    if (location.isNotEmpty)
+                                      Flexible(
+                                        child: Text(
+                                          location,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w400,
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.55),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              const SizedBox(height: 6),
+                              Text(
+                                'Artist assigned to your request',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w400,
+                                  color: AppColors.blackCat,
+                                ),
                               ),
                             ],
-                            const SizedBox(height: 6),
-                            Text(
-                              'Artist assigned to your request',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: AppColors.blackCat,
-                              ),
-                            ),
-                          ],
+                          ),
+                        ),
+                      ],
                         ),
                       ),
-                    ],
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
 
-          if (!isSubmittedStatus &&
-              !isClosedHistoryStatus &&
-              statusPillText != 'In Progress' &&
-              statusPillText != 'Shipped' &&
-              statusPillText != 'Delivered' &&
-              order.artistName.trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _Card(child: _artistWorkingInfoCard()),
-          ],
+            if (!isSubmittedStatus &&
+                !isClosedHistoryStatus &&
+                statusPillText != 'In Progress' &&
+                statusPillText != 'Shipped' &&
+                statusPillText != 'Delivered' &&
+                order.artistName.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _Card(child: _artistWorkingInfoCard()),
+            ],
 
-          if (!isClosedHistoryStatus) const SizedBox(height: 14),
+            if (!isClosedHistoryStatus) const SizedBox(height: 14),
 
-          if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reason for Cancellation',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.cancelReason.trim().isNotEmpty
-                        ? order.cancelReason.trim()
-                        : 'No reason provided.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (isExpiredStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Reason for Expiration',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    order.cancelReason.trim().isNotEmpty
-                        ? order.cancelReason.trim()
-                        : 'This request expired before an artist could complete acceptance and confirmation in time.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Common reasons:',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '1. No artist accepted the request before the need-by timeline.\n'
-                    '2. The request was not confirmed in time.\n'
-                    '3. Required details needed to proceed were incomplete.',
-                    style: TextStyle(
-                      color: AppColors.blackCat.withValues(alpha: 0.82),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12.5,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ] else if (isCancelledStatus) ...[
-            _Card(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _orderDetailsWithRightNailDimensions(),
-                  const SizedBox(height: 14),
-                  Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
-                  const SizedBox(height: 5),
-                  _paymentSection(context),
-                ],
-              ),
-            ),
-          ] else ...[
-            if (statusPillText == 'Completed' ||
-                statusPillText == 'Shipped' ||
-                statusPillText == 'Delivered') ...[
+            if (isCancelledStatus) ...[
               _Card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Artist Completed Art',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                        fontFamily: 'ArialBold',
-                        color: AppColors.blackCat,
-                      ),
-                    ),
+                    const _A11yHeading('Reason for Cancellation'),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      height: 120,
-                      child: _SubmittedPhotosStrip(
-                        paths: order.artistCompletedPhotos,
-                        fallbackOrderId: order.id,
-                        fallbackOrderNumber: order.orderNumber,
-                        sourceCollection: order.sourceCollection,
-                        enableFirestoreFallback: true,
+                    Text(
+                      order.cancelReason.trim().isNotEmpty
+                          ? order.cancelReason.trim()
+                          : 'No reason provided.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
-            ],
-
-            _Card(child: _orderDetailsWithRightNailDimensions()),
-
-            const SizedBox(height: 14),
-            if (statusPillText == 'Shipped' ||
-                statusPillText == 'Delivered') ...[
-              _Card(child: _shippingInformationSection(context)),
-              const SizedBox(height: 14),
-            ],
-            if (statusPillText != 'In Progress' && statusPillText != 'Shipped')
-              _Card(child: _paymentSection(context)),
-            if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
-              const SizedBox(height: 14),
-            if (statusPillText == 'Pending') ...[
-              const SizedBox(height: 14),
-              _Card(child: _finalAcceptedAmountSection()),
-            ],
-            if (statusPillText == 'In Progress') ...[
-              _Card(child: _finalAcceptedAmountSection()),
               const SizedBox(height: 12),
-              SizedBox(
-                height: 46,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blackCat.withValues(alpha: 0.78),
-                    foregroundColor: AppColors.snow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+            ] else if (isExpiredStatus) ...[
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _A11yHeading('Reason for Expiration'),
+                    const SizedBox(height: 10),
+                    Text(
+                      order.cancelReason.trim().isNotEmpty
+                          ? order.cancelReason.trim()
+                          : 'This request expired before an artist could complete acceptance and confirmation in time.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  onPressed: () {
-                    // Brand-submitted requests always talk to the JNT AI
-                    // Assistant, never directly with the accepted artist.
-                    _openAiSupportChat(context);
-                  },
-                  child: const Text(
-                    'Chat',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Arial',
+                    const SizedBox(height: 10),
+                    Text(
+                      'Common reasons:',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '1. No artist accepted the request before the need-by timeline.\n'
+                      '2. The request was not confirmed in time.\n'
+                      '3. Required details needed to proceed were incomplete.',
+                      style: TextStyle(
+                        color: AppColors.blackCat.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12.5,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-            if (statusPillText == 'Shipped') ...[
-              _Card(child: _finalAcceptedAmountSection()),
-            ],
-            if (statusPillText == 'Delivered') ...[
-              _Card(child: _finalAcceptedAmountSection()),
               const SizedBox(height: 12),
-              _Card(child: rightPanel),
-            ],
-          ],
-          if (isClosedHistoryStatus) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat.withValues(
-                          alpha: 0.78,
-                        ),
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        side: const BorderSide(color: AppColors.blackCat),
+            ] else if (isCancelledStatus) ...[
+              _Card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _orderDetailsWithRightNailDimensions(),
+                    if (_hasBrandCollaboration) ...[
+                      const SizedBox(height: 14),
+                      Divider(
+                        color: AppColors.blackCat.withValues(alpha: 0.08),
                       ),
-                      onPressed: () {
-                        if (isCancelledStatus) {
-                          (onCancelledChat ?? () => _openAiSupportChat(context))
-                              .call();
-                          return;
-                        }
-                        (onExpiredChat ??
-                                onCancelledChat ??
-                                () => _openAiSupportChat(context))
-                            .call();
-                      },
-                      child: const Text(
-                        'Chat',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
-                          fontFamily: 'Arial',
-                          color: AppColors.snow,
+                      const SizedBox(height: 5),
+                      _brandCollaborationSummarySection(),
+                    ],
+                    const SizedBox(height: 14),
+                    Divider(color: AppColors.blackCat.withValues(alpha: 0.08)),
+                    const SizedBox(height: 5),
+                    _paymentSection(context),
+                  ],
+                ),
+              ),
+              if (_hasBrandCollaboration) ...[
+                const SizedBox(height: 14),
+                _brandCollaborationSummarySection(),
+              ],
+            ] else ...[
+              if (statusPillText == 'Completed' ||
+                  statusPillText == 'Shipped' ||
+                  statusPillText == 'Delivered') ...[
+                _Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _A11yHeading(
+                        'Artist Completed Art',
+                        fontFamily: 'ArialBold',
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 120,
+                        child: _SubmittedPhotosStrip(
+                          paths: order.artistCompletedPhotos,
+                          fallbackOrderId: order.id,
+                          fallbackOrderNumber: order.orderNumber,
+                          sourceCollection: order.sourceCollection,
+                          enableFirestoreFallback: true,
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        elevation: 0,
+                const SizedBox(height: 14),
+              ],
+
+              _Card(child: _orderDetailsWithRightNailDimensions()),
+
+              const SizedBox(height: 14),
+              if (_hasBrandCollaboration) ...[
+                _brandCollaborationSummarySection(),
+                const SizedBox(height: 14),
+              ],
+              if (statusPillText == 'Shipped' ||
+                  statusPillText == 'Delivered') ...[
+                _Card(child: _shippingInformationSection(context)),
+                const SizedBox(height: 14),
+              ],
+              if (statusPillText != 'In Progress' &&
+                  statusPillText != 'Shipped')
+                _Card(child: _paymentSection(context)),
+              if (statusPillText == 'Delivered' || statusPillText == 'Shipped')
+                const SizedBox(height: 14),
+              if (statusPillText == 'Pending') ...[
+                const SizedBox(height: 14),
+                _Card(child: _finalAcceptedAmountSection()),
+              ],
+              if (statusPillText == 'In Progress') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 46,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.blackCat.withValues(
+                        alpha: 0.78,
                       ),
-                      onPressed: isCancelledStatus
-                          ? ((onCancelledResubmit ?? onExpiredResubmit) == null
-                                ? null
-                                : () =>
-                                      (onCancelledResubmit ??
-                                              onExpiredResubmit)!
-                                          .call())
-                          : ((onExpiredResubmit ?? onCancelledResubmit) == null
-                                ? null
-                                : () =>
-                                      (onExpiredResubmit ??
-                                              onCancelledResubmit)!
-                                          .call()),
-                      child: const Text(
-                        'Resubmit',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12.5,
-                        ),
+                      foregroundColor: AppColors.snow,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () {
+                      _openClientChat(context);
+                    },
+                    child: const Text(
+                      'Chat',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Arial',
                       ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ],
-          if (canCancelBeforeArtistAccept) ...[
-            const SizedBox(height: 14),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  fit: FlexFit.loose,
-                  child: SizedBox(
-                    height: 50,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.blackCat,
-                        foregroundColor: AppColors.snow,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
+              if (statusPillText == 'Shipped') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+              ],
+              if (statusPillText == 'Delivered') ...[
+                _Card(child: _finalAcceptedAmountSection()),
+                const SizedBox(height: 12),
+                _Card(child: rightPanel),
+              ],
+            ],
+            if (isClosedHistoryStatus) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat.withValues(
+                            alpha: 0.78,
+                          ),
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: const BorderSide(color: AppColors.blackCat),
                         ),
-                        side: const BorderSide(color: AppColors.blackCat),
-                      ),
-                      onPressed: () async {
-                        final result = await showDialog<_CancelOrderResult>(
-                          context: context,
-                          barrierDismissible: true,
-                          builder: (_) => const _CancelOrderDialog(),
-                        );
-
-                        if (!context.mounted || result == null) return;
-
-                        if (!result.confirm) {
-                          Navigator.of(context).pop();
-                          return;
-                        }
-
-                        try {
-                          final row = await _supabaseFetchOrderRow(
-                            order.id,
-                            orderNumber: order.orderNumber,
-                          );
-                          final rootData = row ?? const <String, dynamic>{};
-                          final detailsData = _asMap(rootData['details']);
-
-                          final typedReason = result.reason.trim();
-                          final selectedReason = typedReason.isNotEmpty
-                              ? typedReason
-                              : 'Changed my mind on the design';
-                          if (selectedReason.isEmpty) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Cancellation reason is required.',
-                                ),
-                              ),
-                            );
+                        onPressed: () {
+                          if (isCancelledStatus) {
+                            (onCancelledChat ?? () => _openClientChat(context))
+                                .call();
                             return;
                           }
-                          final cancelReason = selectedReason;
-                          final cancelledAt = DateTime.now();
-                          List<dynamic> cancelGroupClients(dynamic value) {
-                            if (value is! List) return const <dynamic>[];
-                            return value
-                                .map((entry) {
-                                  if (entry is! Map) return entry;
-                                  final item = Map<String, dynamic>.from(entry);
-                                  item['responseStatus'] = 'cancelled';
-                                  item['clientResponseStatus'] = 'cancelled';
-                                  item['status'] = 'cancelled';
-                                  item['cancelReason'] = cancelReason;
-                                  item['cancelledAt'] = cancelledAt;
-                                  item['updatedAt'] = cancelledAt;
-                                  return item;
-                                })
-                                .toList(growable: false);
-                          }
-
-                          final updatedGroupClients = cancelGroupClients(
-                            rootData['groupClients'],
-                          );
-                          final updatedGroupOrder =
-                              (detailsData['groupOrder']
-                                  as Map<String, dynamic>?) ??
-                              const <String, dynamic>{};
-                          final updatedGroupOrderClients = cancelGroupClients(
-                            updatedGroupOrder['clients'],
-                          );
-
-                          final nowIso = cancelledAt.toIso8601String();
-                          final updatedRoot = <String, dynamic>{
-                            'status': 'cancelled',
-                            'brand_status': 'cancelled',
-                            'client_status': 'cancelled',
-                            'artist_status': 'cancelled',
-                            'direct_client_status': 'cancelled',
-                            'direct_artist_status': 'cancelled',
-                            if (updatedGroupClients.isNotEmpty)
-                              'group_clients': updatedGroupClients,
-                            'groupClients': updatedGroupClients,
-                            'updated_at': nowIso,
-                            'updatedAt': nowIso,
-                            'cancelled_at': nowIso,
-                            'cancelledAt': nowIso,
-                            'cancel_reason': cancelReason,
-                            'cancelReason': cancelReason,
-                            'cancellation_reason': cancelReason,
-                            'cancellationReason': cancelReason,
-                            'payload': {
-                              ..._asMap(rootData['payload']),
-                              'status': 'cancelled',
-                              'roleStatuses': {
-                                'brand': 'cancelled',
-                                'client': 'cancelled',
-                                'artist': 'cancelled',
-                              },
-                              'routing': {
-                                'directClientStatus': 'cancelled',
-                                'directArtistStatus': 'cancelled',
-                              },
-                              if (updatedGroupOrderClients.isNotEmpty)
-                                'groupOrder': {
-                                  ...updatedGroupOrder,
-                                  'clients': updatedGroupOrderClients,
-                                },
-                              'cancellation': {
-                                'reason': cancelReason,
-                                'cancelledAt': nowIso,
-                                'cancelledBy': 'brand',
-                              },
-                              'updatedAt': nowIso,
-                            },
-                            'details': {
-                              ...detailsData,
-                              'status': 'cancelled',
-                              'roleStatuses': {
-                                'brand': 'cancelled',
-                                'client': 'cancelled',
-                                'artist': 'cancelled',
-                              },
-                              'routing': {
-                                'directClientStatus': 'cancelled',
-                                'directArtistStatus': 'cancelled',
-                              },
-                              if (updatedGroupOrderClients.isNotEmpty)
-                                'groupOrder': {
-                                  ...updatedGroupOrder,
-                                  'clients': updatedGroupOrderClients,
-                                },
-                              'cancellation': {
-                                'reason': cancelReason,
-                                'cancelledAt': nowIso,
-                                'cancelledBy': 'brand',
-                              },
-                              'updatedAt': nowIso,
-                            },
-                          };
-                          await _client
-                              .from('company_custom_requests')
-                              .update(updatedRoot)
-                              .eq('id', order.id);
-
-                          await _notifyOnBrandCancellation(
-                            reason: cancelReason,
-                            rootData: rootData,
-                            detailsData: detailsData,
-                          );
-
-                          if (!context.mounted) return;
-                          Navigator.of(context).pop();
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed to cancel order: $e'),
-                            ),
-                          );
-                        }
-                      },
-                      child: const Text(
-                        'Cancel Order',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12.5,
-                          fontFamily: 'Arial',
-                          color: AppColors.snow,
+                          (onExpiredChat ??
+                                  onCancelledChat ??
+                                  () => _openClientChat(context))
+                              .call();
+                        },
+                        child: const Text(
+                          'Chat',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                            color: AppColors.snow,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: isCancelledStatus
+                            ? ((onCancelledResubmit ?? onExpiredResubmit) ==
+                                      null
+                                  ? null
+                                  : () =>
+                                        (onCancelledResubmit ??
+                                                onExpiredResubmit)!
+                                            .call())
+                            : ((onExpiredResubmit ?? onCancelledResubmit) ==
+                                      null
+                                  ? null
+                                  : () =>
+                                        (onExpiredResubmit ??
+                                                onCancelledResubmit)!
+                                            .call()),
+                        child: const Text(
+                          'Resubmit',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (canCancelBeforeArtistAccept) ...[
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    fit: FlexFit.loose,
+                    child: SizedBox(
+                      height: 50,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: const BorderSide(color: AppColors.blackCat),
+                        ),
+                        onPressed: () async {
+                          final result = await showDialog<_CancelOrderResult>(
+                            context: context,
+                            barrierDismissible: true,
+                            builder: (_) => const _CancelOrderDialog(),
+                          );
+
+                          if (!context.mounted || result == null) return;
+
+                          if (!result.confirm) {
+                            // The dialog has already closed. Keep the user on
+                            // Brand Order Details when they choose Keep Order.
+                            return;
+                          }
+
+                          try {
+                            final row = await _supabaseFetchOrderRow(
+                              order.id,
+                              orderNumber: order.orderNumber,
+                            );
+                            final rootData = row ?? const <String, dynamic>{};
+                            final detailsData = _asMap(rootData['details']);
+
+                            // Re-checked against this fresh fetch (not the
+                            // possibly-stale `order` this page was built
+                            // from) so cancellation stays blocked once an
+                            // artist has accepted, even if that happened in
+                            // the window between this page loading and Brand
+                            // tapping Cancel -- the button itself is only
+                            // ever shown pre-acceptance (canCancelBeforeArtistAccept
+                            // above), but nothing previously stopped the
+                            // write itself from going through regardless.
+                            String pickEmail(List<Object?> values) {
+                              for (final value in values) {
+                                final text = (value ?? '')
+                                    .toString()
+                                    .trim()
+                                    .toLowerCase();
+                                if (text.isNotEmpty) return text;
+                              }
+                              return '';
+                            }
+
+                            final acceptedArtistEmail = pickEmail(<Object?>[
+                              rootData['accepted_by_artist_email'],
+                              rootData['acceptedByArtistEmail'],
+                              detailsData['acceptance'] is Map
+                                  ? (detailsData['acceptance']
+                                        as Map)['acceptedByArtistEmail']
+                                  : null,
+                            ]);
+                            if (acceptedArtistEmail.isNotEmpty) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'An artist has already accepted this '
+                                    'request, so it can no longer be '
+                                    'cancelled.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            final typedReason = result.reason.trim();
+                            final selectedReason = typedReason.isNotEmpty
+                                ? typedReason
+                                : 'Changed my mind on the design';
+                            if (selectedReason.isEmpty) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Cancellation reason is required.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            final cancelReason = selectedReason;
+                            final cancelledAt = DateTime.now();
+                            List<dynamic> cancelGroupClients(dynamic value) {
+                              if (value is! List) return const <dynamic>[];
+                              return value
+                                  .map((entry) {
+                                    if (entry is! Map) return entry;
+                                    final item = Map<String, dynamic>.from(
+                                      entry,
+                                    );
+                                    item['responseStatus'] = 'cancelled';
+                                    item['clientResponseStatus'] = 'cancelled';
+                                    item['status'] = 'cancelled';
+                                    item['cancelReason'] = cancelReason;
+                                    item['cancelledAt'] = cancelledAt;
+                                    item['updatedAt'] = cancelledAt;
+                                    return item;
+                                  })
+                                  .toList(growable: false);
+                            }
+
+                            final updatedGroupClients = cancelGroupClients(
+                              rootData['groupClients'],
+                            );
+                            final updatedGroupOrder =
+                                (detailsData['groupOrder']
+                                    as Map<String, dynamic>?) ??
+                                const <String, dynamic>{};
+                            final updatedGroupOrderClients = cancelGroupClients(
+                              updatedGroupOrder['clients'],
+                            );
+
+                            final nowIso = cancelledAt.toIso8601String();
+                            final updatedRoot = <String, dynamic>{
+                              'status': 'cancelled',
+                              'brand_status': 'cancelled',
+                              'client_status': 'cancelled',
+                              'artist_status': 'cancelled',
+                              'direct_client_status': 'cancelled',
+                              'direct_artist_status': 'cancelled',
+                              if (updatedGroupClients.isNotEmpty)
+                                'group_clients': updatedGroupClients,
+                              'groupClients': updatedGroupClients,
+                              'updated_at': nowIso,
+                              'updatedAt': nowIso,
+                              'cancelled_at': nowIso,
+                              'cancelledAt': nowIso,
+                              'cancel_reason': cancelReason,
+                              'cancelReason': cancelReason,
+                              'cancellation_reason': cancelReason,
+                              'cancellationReason': cancelReason,
+                              'payload': {
+                                ..._asMap(rootData['payload']),
+                                'status': 'cancelled',
+                                'roleStatuses': {
+                                  'brand': 'cancelled',
+                                  'client': 'cancelled',
+                                  'artist': 'cancelled',
+                                },
+                                'routing': {
+                                  'directClientStatus': 'cancelled',
+                                  'directArtistStatus': 'cancelled',
+                                },
+                                if (updatedGroupOrderClients.isNotEmpty)
+                                  'groupOrder': {
+                                    ...updatedGroupOrder,
+                                    'clients': updatedGroupOrderClients,
+                                  },
+                                'cancellation': {
+                                  'reason': cancelReason,
+                                  'cancelledAt': nowIso,
+                                  'cancelledBy': 'brand',
+                                },
+                                'updatedAt': nowIso,
+                              },
+                              'details': {
+                                ...detailsData,
+                                'status': 'cancelled',
+                                'roleStatuses': {
+                                  'brand': 'cancelled',
+                                  'client': 'cancelled',
+                                  'artist': 'cancelled',
+                                },
+                                'routing': {
+                                  'directClientStatus': 'cancelled',
+                                  'directArtistStatus': 'cancelled',
+                                },
+                                if (updatedGroupOrderClients.isNotEmpty)
+                                  'groupOrder': {
+                                    ...updatedGroupOrder,
+                                    'clients': updatedGroupOrderClients,
+                                  },
+                                'cancellation': {
+                                  'reason': cancelReason,
+                                  'cancelledAt': nowIso,
+                                  'cancelledBy': 'brand',
+                                },
+                                'updatedAt': nowIso,
+                              },
+                            };
+                            await _client
+                                .from('company_custom_requests')
+                                .update(updatedRoot)
+                                .eq('id', order.id);
+
+                            await _notifyOnBrandCancellation(
+                              reason: cancelReason,
+                              rootData: rootData,
+                              detailsData: detailsData,
+                            );
+
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to cancel order: $e'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text(
+                          'Cancel Order',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                            fontFamily: 'Arial',
+                            color: AppColors.snow,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
               ],
             ),
-          ],
-        ],
-      ),
+          ),
+        ),
       ),
     );
   }
@@ -1787,40 +2350,53 @@ class _BaseOrderDetails extends StatelessWidget {
         : isPending
         ? 'Payment Pending'
         : 'Payment Range';
-    final amount =
-        (order.artistAcceptedAmount ?? order.budgetMax ?? order.budgetMin);
+    // Group campaigns: the brand's committed budgetMax is the real final
+    // amount, not the artist's own entered price (internal ceiling check
+    // only) -- see order_details_pages.dart's _paymentSection for the
+    // client-flow mirror of this same rule.
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    final hasArtistAmount = order.artistAcceptedAmount != null;
+    final amount = hasArtistAmount
+        ? (isGroupOrder
+              ? (order.budgetMax ?? order.artistAcceptedAmount)
+              : order.artistAcceptedAmount)
+        : (order.budgetMax ?? order.budgetMin);
     final rangeText = _budgetText();
     final amountText = amount == null ? rangeText : '\$$amount';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          header,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
+        _A11yHeading(header),
         const SizedBox(height: 10),
         if (isPaid || isPending)
-          Row(
-            children: [
-              Text(
-                isPaid ? 'Paid Amount:' : 'Amount Due:',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                ),
+          Semantics(
+            label: '${isPaid ? 'Paid amount' : 'Amount due'}, $amountText',
+            child: ExcludeSemantics(
+              child: Row(
+                children: [
+                  Text(
+                    isPaid ? 'Paid Amount:' : 'Amount Due:',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    amountText,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.blackCat,
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
-              Text(
-                amountText,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.blackCat,
-                ),
-              ),
-            ],
+            ),
           )
         else
           FutureBuilder<Map<String, String>>(
@@ -1835,7 +2411,10 @@ class _BaseOrderDetails extends StatelessWidget {
                   : rangeText;
               return Column(
                 children: [
-                  Row(
+                  Semantics(
+                    label: 'Client budget range, $clientRange',
+                    child: ExcludeSemantics(
+                      child: Row(
                     children: [
                       const Text(
                         'Client Budget Range:',
@@ -1855,9 +2434,14 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 6),
-                  Row(
+                  Semantics(
+                    label: 'Artist budget range, $artistRange',
+                    child: ExcludeSemantics(
+                      child: Row(
                     children: [
                       const Text(
                         'Artist Budget Range:',
@@ -1877,6 +2461,8 @@ class _BaseOrderDetails extends StatelessWidget {
                         ),
                       ),
                     ],
+                      ),
+                    ),
                   ),
                 ],
               );
@@ -1928,7 +2514,13 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   Widget _artistWorkingInfoCard() {
-    return Row(
+    final artistName = order.artistName.trim().isEmpty
+        ? 'Artist'
+        : order.artistName.trim();
+    return Semantics(
+      label: '$artistName. Artist working on your nail art.',
+      child: ExcludeSemantics(
+        child: Row(
       children: [
         Container(
           height: 50,
@@ -1965,30 +2557,38 @@ class _BaseOrderDetails extends StatelessWidget {
           ),
         ),
       ],
+        ),
+      ),
     );
   }
 
   Widget _finalAmountRow(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
+    final cleanLabel = label.replaceAll(':', '').trim();
+    return Semantics(
+      label: '$cleanLabel, $value',
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: AppColors.blackCat,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.blackCat,
+              ),
+            ),
+          ],
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.blackCat,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -2013,23 +2613,23 @@ class _BaseOrderDetails extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text(
+                const _A11yHeading(
                   'Final Amount',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: AppColors.blackCat,
-                    fontFamily: 'ArialBold',
-                  ),
+                  fontFamily: 'ArialBold',
                 ),
                 const Spacer(),
-                Text(
+                Semantics(
+                  label: 'Final amount, $sumText',
+                  child: ExcludeSemantics(
+                    child: Text(
                   sumText,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
                     color: AppColors.blackCat,
                     fontFamily: 'ArialBold',
+                  ),
+                    ),
                   ),
                 ),
               ],
@@ -2056,19 +2656,14 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        const _A11yHeading(
           'Shipping Information',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: AppColors.blackCat,
-            fontFamily: 'ArialBold',
-          ),
+          fontFamily: 'ArialBold',
         ),
         const SizedBox(height: 10),
         _bullet('Courier', courier),
         _bullet('Shipping Date', shippedOn),
-        _bullet('Tracking #', tracking),
+        _bullet('Tracking number', tracking, speakAsIdentifier: true),
         if (statusPillText == 'Shipped') ...[
           const SizedBox(height: 10),
           SizedBox(
@@ -2424,12 +3019,14 @@ class _BaseOrderDetails extends StatelessWidget {
   Future<void> _simulatePayment(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => Semantics(
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: 'Simulate Payment',
+        child: AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        title: const Text(
-          'Simulate Payment',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
+        title: const _A11yHeading('Simulate Payment'),
         content: const Text(
           'Mark this order as paid for testing?',
           style: TextStyle(fontSize: 12),
@@ -2454,6 +3051,7 @@ class _BaseOrderDetails extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
 
@@ -2575,10 +3173,7 @@ class _BaseOrderDetails extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Order Details',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-          ),
+          const _A11yHeading('Order Details'),
           const SizedBox(height: 10),
           _bullet('Campaign Name', _valueOrDash(order.title)),
           _bullet('Description', _valueOrDash(order.clientDescription)),
@@ -2588,14 +3183,10 @@ class _BaseOrderDetails extends StatelessWidget {
           _bullet('Requested Artist', _requestArtistDisplay()),
           _bullet('Accepted Clients', _acceptedClientsDisplay()),
           const SizedBox(height: 10),
-          const Text(
+          const _A11yHeading(
             'Uploaded Photos',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              fontFamily: 'ArialBold',
-              color: AppColors.blackCat,
-            ),
+            fontSize: 15,
+            fontFamily: 'ArialBold',
           ),
           const SizedBox(height: 10),
           _SubmittedPhotosStrip(
@@ -2603,7 +3194,7 @@ class _BaseOrderDetails extends StatelessWidget {
             fallbackOrderId: order.id,
             fallbackOrderNumber: order.orderNumber,
             sourceCollection: order.sourceCollection,
-            enableFirestoreFallback: false,
+            enableFirestoreFallback: true,
             showAll: true,
           ),
           // Keep in code per request, but hide from UI:
@@ -2615,6 +3206,194 @@ class _BaseOrderDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [detailsBlock()],
+    );
+  }
+
+  bool get _hasBrandCollaboration {
+    final bc = order.brandCollaboration;
+    if (bc['enabled'] != true) return false;
+    return _hasSubmittedBrandCollaborationOffer(bc);
+  }
+
+  bool _hasSubmittedBrandCollaborationOffer(Map<String, dynamic> bc) {
+    final posts = _asMap(bc['posts']);
+    final hasPosts = const [
+      'instagramReel',
+      'instagramStories',
+      'carouselPost',
+      'tiktok',
+    ].any((key) => (_asIntValue(posts[key]) ?? 0) > 0);
+    if (hasPosts) return true;
+
+    if (bc['nfcCardTapsEnabled'] == true) return true;
+
+    final links = (bc['links'] is List) ? bc['links'] as List : const [];
+    final hasLinks = links.any((raw) {
+      final link = _asMap(raw);
+      return (link['label'] ?? '').toString().trim().isNotEmpty ||
+          (link['url'] ?? '').toString().trim().isNotEmpty;
+    });
+    if (hasLinks) return true;
+
+    final wording = _asMap(bc['wording']);
+    final hasWording =
+        ((wording['mustInclude'] is List) &&
+            (wording['mustInclude'] as List).isNotEmpty) ||
+        ((wording['doNotSay'] is List) &&
+            (wording['doNotSay'] as List).isNotEmpty) ||
+        (wording['talkingPoints'] ?? '').toString().trim().isNotEmpty;
+    if (hasWording) return true;
+
+    final pricing = _asMap(bc['pricing']);
+    return (pricing['runAsAd'] == true) ||
+        (_asIntValue(pricing['baseFee']) ?? 0) > 0 ||
+        (_asIntValue(pricing['repostFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['competingBrandsFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['paidAdsFeeAmount']) ?? 0) > 0 ||
+        (_asIntValue(pricing['dueOnSigning']) ?? 0) > 0;
+  }
+
+  Widget _brandCollaborationSummarySection() {
+    final bc = order.brandCollaboration;
+    final posts = _asMap(bc['posts']);
+    final postLines = <String>[
+      for (final entry in {
+        'instagramReel': 'Instagram Reel',
+        'instagramStories': 'Instagram Stories',
+        'carouselPost': 'Carousel post',
+        'tiktok': 'TikTok',
+      }.entries)
+        if ((_asIntValue(posts[entry.key]) ?? 0) > 0)
+          '${_asIntValue(posts[entry.key])}x ${entry.value}',
+    ];
+
+    final nfcCardTapsEnabled = bc['nfcCardTapsEnabled'] == true;
+    final tapRate = bc['tapRatePerTap'];
+    final tapCap = _asIntValue(bc['tapCap']);
+    final tapGoesToUrl = (bc['tapGoesToUrl'] ?? '').toString().trim();
+
+    final links = (bc['links'] is List) ? bc['links'] as List : const [];
+    final linkLines = <String>[
+      for (final raw in links)
+        if (_asMap(raw)['label'] != null || _asMap(raw)['url'] != null)
+          '${_asMap(raw)['label'] ?? ''} — ${_asMap(raw)['url'] ?? ''}'.trim(),
+    ];
+
+    final wording = _asMap(bc['wording']);
+    final mustInclude = (wording['mustInclude'] is List)
+        ? List<String>.from(wording['mustInclude'] as List)
+        : const <String>[];
+    final doNotSay = (wording['doNotSay'] is List)
+        ? List<String>.from(wording['doNotSay'] as List)
+        : const <String>[];
+    final talkingPoints = (wording['talkingPoints'] ?? '').toString().trim();
+
+    final pricing = _asMap(bc['pricing']);
+    final baseFee = _asIntValue(pricing['baseFee']) ?? 0;
+    final repostFee = _asIntValue(pricing['repostFeeAmount']) ?? 0;
+    final competingFee = _asIntValue(pricing['competingBrandsFeeAmount']) ?? 0;
+    final runAsAd = pricing['runAsAd'] == true;
+    final paidAdsFee = _asIntValue(pricing['paidAdsFeeAmount']) ?? 0;
+    final dueOnDelivery = _asIntValue(pricing['dueOnSigning']) ?? 0;
+
+    Widget subHeader(String title) {
+      return _A11yHeading(
+        title,
+        fontSize: 15,
+        fontFamily: 'ArialBold',
+      );
+    }
+
+    Widget sectionDivider() {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Divider(
+          height: 1,
+          color: AppColors.blackCat.withValues(alpha: 0.12),
+        ),
+      );
+    }
+
+    final hasWording =
+        mustInclude.isNotEmpty ||
+        doNotSay.isNotEmpty ||
+        talkingPoints.isNotEmpty;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _A11yHeading('Brand Collaboration'),
+          const SizedBox(height: 12),
+          subHeader('Posts'),
+          const SizedBox(height: 8),
+          if (postLines.isEmpty)
+            Text(
+              'No posts requested.',
+              style: TextStyle(
+                color: AppColors.blackCat.withValues(alpha: 0.75),
+              ),
+            )
+          else
+            for (final line in postLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  line,
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          if (nfcCardTapsEnabled) ...[
+            sectionDivider(),
+            subHeader('NFC Card Taps'),
+            const SizedBox(height: 8),
+            _bullet(
+              'Per tap',
+              tapRate == null
+                  ? 'Flat'
+                  : '\$${(tapRate as num).toStringAsFixed(2)}',
+            ),
+            _bullet('Paid up to', tapCap == null ? '-' : '$tapCap'),
+            if (tapGoesToUrl.isNotEmpty) _bullet('Tap opens', tapGoesToUrl),
+          ],
+          if (linkLines.isNotEmpty) ...[
+            sectionDivider(),
+            subHeader('Links'),
+            const SizedBox(height: 8),
+            for (final line in linkLines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  line,
+                  style: TextStyle(
+                    color: AppColors.blackCat.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
+          if (hasWording) ...[
+            sectionDivider(),
+            subHeader('Wording'),
+            const SizedBox(height: 8),
+            if (mustInclude.isNotEmpty)
+              _bullet('Must include', mustInclude.join(', ')),
+            if (talkingPoints.isNotEmpty)
+              _bullet('Talking points', talkingPoints),
+            if (doNotSay.isNotEmpty) _bullet("Don't say", doNotSay.join(', ')),
+          ],
+          sectionDivider(),
+          subHeader('Pricing'),
+          const SizedBox(height: 8),
+          _bullet('Base fee', '\$$baseFee'),
+          if (repostFee > 0) _bullet('Reposting fee', '+\$$repostFee'),
+          if (competingFee > 0) _bullet('Exclusivity fee', '+\$$competingFee'),
+          if (runAsAd) _bullet('Paid ads fee', '+\$$paidAdsFee'),
+          Divider(color: AppColors.blackCat.withValues(alpha: 0.1)),
+          _bullet('Due on delivery', '\$$dueOnDelivery'),
+        ],
+      ),
     );
   }
 
@@ -2720,29 +3499,39 @@ class _BaseOrderDetails extends StatelessWidget {
     }
   }
 
-  static Widget _bullet(String k, String v) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: RichText(
-        text: TextSpan(
-          style: TextStyle(
-            color: AppColors.blackCat,
-            fontWeight: FontWeight.w400,
-            fontSize: 14,
-          ),
-          children: [
-            TextSpan(
-              text: '$k: ',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
+  static Widget _bullet(
+    String k,
+    String v, {
+    bool speakAsIdentifier = false,
+  }) {
+    final spokenValue = speakAsIdentifier ? _a11yIdentifier(v) : v;
+    return Semantics(
+      label: '$k, $spokenValue',
+      child: ExcludeSemantics(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
                 color: AppColors.blackCat,
+                fontWeight: FontWeight.w400,
+                fontSize: 14,
               ),
+              children: [
+                TextSpan(
+                  text: '$k: ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.blackCat,
+                  ),
+                ),
+                TextSpan(
+                  text: v,
+                  style: const TextStyle(color: AppColors.blackCat),
+                ),
+              ],
             ),
-            TextSpan(
-              text: v,
-              style: const TextStyle(color: AppColors.blackCat),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2791,14 +3580,40 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   String _acceptedClientsDisplay() {
-    final accepted = order.groupClients
-        .where(
-          (client) => client.responseStatus.trim().toLowerCase() == 'accepted',
-        )
-        .map((client) => client.clientName.trim())
-        .where((name) => name.isNotEmpty)
-        .toList(growable: false);
-    if (accepted.isNotEmpty) return accepted.toSet().join(', ');
+    final isGroupOrder =
+        order.orderType.trim().toLowerCase() == 'group' ||
+        order.groupClients.isNotEmpty;
+    if (isGroupOrder) {
+      final accepted = order.groupClients
+          .where(
+            (client) =>
+                client.responseStatus.trim().toLowerCase() == 'accepted',
+          )
+          .map((client) => client.clientName.trim())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      if (accepted.isNotEmpty) return accepted.join(', ');
+      return '-';
+    }
+
+    // Single/direct client: show the brand's selected client once they've
+    // actually accepted, independent of whether an artist has accepted yet.
+    if (order.directClientStatus.trim().toLowerCase() == 'accepted') {
+      final name = order.selectedClientName.trim();
+      if (name.isNotEmpty) return name;
+    }
+
+    // Open client pool claimed by a client: the request has no pre-selected
+    // client, so the accepted client only shows up via acceptance fields.
+    if (order.clientResponseStatus.trim().toLowerCase() == 'accepted' ||
+        order.acceptedByClientEmail.trim().isNotEmpty) {
+      final name = order.acceptedClientName.trim();
+      if (name.isNotEmpty) return name;
+      if (order.acceptedByClientEmail.trim().isNotEmpty) {
+        return order.acceptedByClientEmail.trim();
+      }
+    }
     return '-';
   }
 
@@ -2823,6 +3638,9 @@ class _ProgressCard extends StatelessWidget {
     return _InfoCard(
       title: 'Progress',
       lines: steps.map((s) => '${s.done ? "✓" : "•"} ${s.label}').toList(),
+      semanticLines: steps
+          .map((s) => '${s.label}, ${s.done ? 'complete' : 'not complete'}')
+          .toList(growable: false),
     );
   }
 }
@@ -2839,15 +3657,20 @@ class _InfoCard extends StatelessWidget {
     required this.lines,
     this.backgroundColor = AppColors.snow,
     this.textColor = AppColors.blackCat,
+    this.semanticLines,
   });
   final String title;
   final List<String> lines;
+  final List<String>? semanticLines;
   final Color backgroundColor;
   final Color textColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: backgroundColor,
@@ -2857,26 +3680,34 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
+          _A11yHeading(title, fontSize: 12),
           const SizedBox(height: 8),
-          ...lines.map(
-            (l) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                l,
-                style: TextStyle(
-                  color: textColor,
-                  fontWeight: FontWeight.w400,
-                  fontSize: 11.5,
+          ...List<Widget>.generate(lines.length, (index) {
+            final line = lines[index];
+            final semanticLine = semanticLines != null &&
+                    index < semanticLines!.length
+                ? semanticLines![index]
+                : line;
+            return Semantics(
+              label: semanticLine,
+              child: ExcludeSemantics(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    line,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w400,
+                      fontSize: 11.5,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          }),
         ],
       ),
+        ),
     );
   }
 }
@@ -2887,14 +3718,20 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        color: AppColors.snow,
-        borderRadius: BorderRadius.zero,
-        border: Border.all(color: AppColors.blackCat.withValues(alpha: 0.12)),
+    return Semantics(
+      container: true,
+      explicitChildNodes: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        decoration: BoxDecoration(
+          color: AppColors.snow,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(
+            color: AppColors.blackCat.withValues(alpha: 0.12),
+          ),
+        ),
+        child: child,
       ),
-      child: child,
     );
   }
 }
@@ -2914,6 +3751,15 @@ class _CancelOrderDialog extends StatefulWidget {
 
 class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   final TextEditingController _reasonCtrl = TextEditingController();
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'cancelOrderClose');
+  final FocusNode _reasonFocusNode = FocusNode(debugLabel: 'cancelOrderReason');
+  final GlobalKey _closeSemanticsKey = GlobalKey(
+    debugLabel: 'cancelOrderCloseA11y',
+  );
+  final GlobalKey _reasonSemanticsKey = GlobalKey(
+    debugLabel: 'cancelOrderReasonA11y',
+  );
+
   String _selected = 'Changed my mind on the design';
   String _error = '';
 
@@ -2926,237 +3772,462 @@ class _CancelOrderDialogState extends State<_CancelOrderDialog> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_focusCloseAfterDialogSettles());
+    });
+  }
+
+  @override
   void dispose() {
     _reasonCtrl.dispose();
+    _closeFocusNode.dispose();
+    _reasonFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _focusCloseAfterDialogSettles() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_closeFocusNode);
+    _closeSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _closeSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  Future<void> _focusReasonField() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_reasonFocusNode);
+    _reasonSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  void _announce(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  void _selectReason(String value) {
+    setState(() {
+      _selected = value;
+      _error = '';
+    });
+    _announce('$value selected.');
+    if (value == 'Something else') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_focusReasonField());
+      });
+    }
+  }
+
+  void _submitCancellation() {
+    final typed = _reasonCtrl.text.trim();
+    if (_selected == 'Something else' && typed.isEmpty) {
+      setState(() => _error = 'Please enter a reason.');
+      _announce('Please enter a cancellation reason.');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_focusReasonField());
+      });
+      return;
+    }
+    final reason = _selected == 'Something else'
+        ? 'Something else: $typed'
+        : _selected;
+    Navigator.of(context).pop(
+      _CancelOrderResult(confirm: true, reason: reason),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Cancel Order',
+      child: Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          decoration: BoxDecoration(
+            color: AppColors.snow,
+            borderRadius: BorderRadius.zero,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Semantics(
+                        sortKey: OrdinalSortKey(1),
+                        header: true,
+                        label: 'Cancel Order',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            'Cancel Order?',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Semantics(
+                      key: _closeSemanticsKey,
+                      sortKey: OrdinalSortKey(0),
+                      button: true,
+                      label: 'Close Cancel Order',
+                      hint: 'Double tap to keep this order and close',
+                      onTap: () => Navigator.of(context).pop(),
+                      child: ExcludeSemantics(
+                        child: IconButton(
+                          focusNode: _closeFocusNode,
+                          tooltip: 'Close Cancel Order',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Semantics(
+                  container: true,
+                  explicitChildNodes: true,
+                  sortKey: OrdinalSortKey(2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: ExcludeSemantics(
+                          child: Container(
+                            height: 74,
+                            width: 74,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.balletSlippers,
+                              border: Border.all(
+                                color: AppColors.blackCat.withValues(alpha: 15),
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.warning_amber_rounded,
+                              size: 38,
+                              color: AppColors.blackCat.withValues(alpha: 140),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Text(
+                          'Are you certain you want to cancel this order?\n'
+                          'This will alert the artist and stop any progress made so far.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.blackCat,
+                            fontSize: 13,
+                            height: 1.35,
+                            fontFamily: 'Arial',
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const _A11yHeading(
+                        'Reason for Cancellation',
+                        fontFamily: 'ArialBold',
+                      ),
+                      const SizedBox(height: 10),
+                      Semantics(
+                        container: true,
+                        explicitChildNodes: true,
+                        child: RadioGroup<String>(
+                          groupValue: _selected,
+                          onChanged: (v) {
+                            if (v != null) _selectReason(v);
+                          },
+                          child: Column(
+                            children: _reasons.entries
+                                .map(
+                                  (entry) => RadioListTile<String>(
+                                    value: entry.key,
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    activeColor: AppColors.blackCat,
+                                    title: Text(
+                                      entry.key,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    subtitle: entry.value.isEmpty
+                                        ? null
+                                        : Text(
+                                            entry.value,
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                        ),
+                      ),
+                      if (_selected == 'Something else') ...[
+                        const SizedBox(height: 8),
+                        Semantics(
+                          key: _reasonSemanticsKey,
+                          label: 'Cancellation reason',
+                          textField: true,
+                          isRequired: true,
+                          child: TextField(
+                            controller: _reasonCtrl,
+                            focusNode: _reasonFocusNode,
+                            minLines: 1,
+                            maxLines: 3,
+                            onChanged: (_) {
+                              if (_error.isNotEmpty) {
+                                setState(() => _error = '');
+                              }
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Enter your reason...',
+                              isDense: true,
+                              filled: true,
+                              fillColor: AppColors.snow,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 16,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(alpha: 20),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero,
+                                borderSide: BorderSide(
+                                  color: AppColors.blackCat.withValues(alpha: 20),
+                                ),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.3,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (_error.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Semantics(
+                          liveRegion: true,
+                          label: 'Error. $_error',
+                          child: ExcludeSemantics(
+                            child: Text(
+                              _error,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      AppColors.blackCat.withValues(alpha: 0.72),
+                                  foregroundColor: AppColors.snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                  elevation: 0,
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).pop(
+                                    const _CancelOrderResult(
+                                      confirm: false,
+                                      reason: '',
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  'Keep Order',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.blackCat,
+                                  foregroundColor: AppColors.snow,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                                onPressed: _submitCancellation,
+                                icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text(
+                                  'Yes, Cancel Order',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Semantics(
+                  sortKey: OrdinalSortKey(3),
+                  button: true,
+                  label: 'Close Cancel Order',
+                  onTap: () => Navigator.of(context).pop(),
+                  onDidGainAccessibilityFocus: () {
+                    unawaited(_focusCloseAfterDialogSettles());
+                  },
+                  child: const SizedBox(height: 1, width: 1),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccessibleOrderImagePreviewDialog extends StatefulWidget {
+  const _AccessibleOrderImagePreviewDialog({required this.image});
+  final ImageProvider image;
+
+  @override
+  State<_AccessibleOrderImagePreviewDialog> createState() =>
+      _AccessibleOrderImagePreviewDialogState();
+}
+
+class _AccessibleOrderImagePreviewDialogState
+    extends State<_AccessibleOrderImagePreviewDialog> {
+  final FocusNode _closeFocusNode = FocusNode(debugLabel: 'orderImageClose');
+  final GlobalKey _closeKey = GlobalKey(debugLabel: 'orderImageCloseA11y');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (!mounted) return;
+      FocusScope.of(context).requestFocus(_closeFocusNode);
+      _closeKey.currentContext
+          ?.findRenderObject()
+          ?.sendSemanticsEvent(const FocusSemanticEvent());
+    });
+  }
+
+  @override
+  void dispose() {
+    _closeFocusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-        decoration: BoxDecoration(
-          color: AppColors.snow,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 2),
-              Center(
-                child: Container(
-                  height: 74,
-                  width: 74,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.balletSlippers,
-                    border: Border.all(
-                      color: AppColors.blackCat.withValues(alpha: 15),
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.warning_amber_rounded,
-                    size: 38,
-                    color: AppColors.blackCat.withValues(alpha: 140),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Center(
-                child: Text(
-                  'Cancel Order?',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Are you certain you want to cancel this order?\nThis will alert the artist and stop any progress made so far.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.blackCat,
-                    fontSize: 13,
-                    height: 1.35,
-                    fontFamily: 'Arial',
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Reason for Cancellation',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  fontFamily: 'ArialBold',
-                ),
-              ),
-              const SizedBox(height: 10),
-              RadioGroup<String>(
-                groupValue: _selected,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _selected = v;
-                    _error = '';
-                  });
-                },
-                child: Column(
-                  children: _reasons.entries
-                      .map(
-                        (entry) => RadioListTile<String>(
-                          value: entry.key,
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                          activeColor: AppColors.blackCat,
-                          title: Text(
-                            entry.key,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          subtitle: entry.value.isEmpty
-                              ? null
-                              : Text(
-                                  entry.value,
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ),
-              if (_selected == 'Something else')
-                TextField(
-                  controller: _reasonCtrl,
-                  minLines: 1,
-                  maxLines: 3,
-                  onChanged: (_) {
-                    if (_error.isNotEmpty) setState(() => _error = '');
-                  },
-                  decoration: InputDecoration(
-                    hintText: 'Enter your reason...',
-                    isDense: true,
-                    filled: true,
-                    fillColor: AppColors.snow,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 36,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.zero,
-                      borderSide: BorderSide(
-                        color: AppColors.blackCat.withValues(alpha: 20),
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Order image preview',
+      child: Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(8),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Semantics(
+                label: 'Order photo. Pinch to zoom or drag to inspect.',
+                image: true,
+                child: ExcludeSemantics(
+                  child: InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4,
+                    child: Center(
+                      child: Image(
+                        image: widget.image,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
                   ),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.3,
-                    fontFamily: 'Arial',
-                  ),
                 ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat.withValues(
-                            alpha: 0.72,
-                          ),
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          Navigator.of(context).pop(
-                            const _CancelOrderResult(
-                              confirm: false,
-                              reason: '',
-                            ),
-                          );
-                        },
-                        child: const Text(
-                          'Keep Order',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                        ),
-                        onPressed: () {
-                          final typed = _reasonCtrl.text.trim();
-                          if (_selected == 'Something else' && typed.isEmpty) {
-                            setState(() => _error = 'Please enter a reason.');
-                            return;
-                          }
-                          final reason = _selected == 'Something else'
-                              ? 'Something else: $typed'
-                              : _selected;
-                          Navigator.of(context).pop(
-                            _CancelOrderResult(confirm: true, reason: reason),
-                          );
-                        },
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 18,
-                        ),
-                        label: const Text(
-                          'Yes, Cancel Order',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
-              if (_error.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error,
-                  style: const TextStyle(
-                    color: Colors.redAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Semantics(
+                key: _closeKey,
+                button: true,
+                label: 'Close image preview',
+                hint: 'Double tap to close',
+                onTap: () => Navigator.of(context).pop(),
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    focusNode: _closeFocusNode,
+                    tooltip: 'Close image preview',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: AppColors.snow),
                   ),
                 ),
-              ],
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -3171,18 +4242,13 @@ class _SubmittedPhotosStrip extends StatefulWidget {
     this.sourceCollection = 'Company_Custom_Requests',
     this.enableFirestoreFallback = false,
     this.showAll = false,
-    this.uploadedOnly = false,
-    this.maxItems,
   });
-
   final List<String> paths;
   final String fallbackOrderId;
   final String fallbackOrderNumber;
   final String sourceCollection;
   final bool enableFirestoreFallback;
   final bool showAll;
-  final bool uploadedOnly;
-  final int? maxItems;
 
   @override
   State<_SubmittedPhotosStrip> createState() => _SubmittedPhotosStripState();
@@ -3238,12 +4304,11 @@ class _SubmittedPhotosStrip extends StatefulWidget {
   static List<String> _collectPhotoRefs(List<dynamic> values) {
     final out = <String>[];
     final seen = <String>{};
-
     void addValue(dynamic value) {
       if (value == null) return;
       if (value is String) {
         final s = value.trim();
-        if (s.isNotEmpty && seen.add(s)) out.add(s);
+        if (_isUsablePhotoRef(s) && seen.add(s)) out.add(s);
         return;
       }
       if (value is Iterable) {
@@ -3295,18 +4360,16 @@ class _SubmittedPhotosStrip extends StatefulWidget {
 }
 
 class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
-  // Both futures below are memoized here (recomputed only when the
-  // underlying paths actually change, via didUpdateWidget) rather than
-  // being created inline in build(). Creating them inline meant every
-  // unrelated ancestor rebuild (any other FutureBuilder/setState on the
-  // order details page) tore down and recreated these futures, which reset
-  // the FutureBuilders below to their loading/blank placeholder and
-  // re-ran the network existence-check + precache calls from scratch --
+  // Memoized here (recomputed only when the underlying paths/flags actually
+  // change, via didUpdateWidget) rather than created inline in build().
+  // Creating a fresh Future in build() meant every unrelated ancestor
+  // rebuild reset the FutureBuilder below to its loading/blank placeholder
+  // and re-ran the network existence-check + precache calls from scratch --
   // visible as photos that load fine once, then flash blank again on the
   // next incidental rebuild.
   Future<List<String>>? _fallbackPhotosFuture;
   Future<List<String>>? _displayPathsFuture;
-  List<String> _lastInitial = const <String>[];
+  List<String> _lastRenderable = const <String>[];
 
   @override
   void initState() {
@@ -3319,9 +4382,7 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     super.didUpdateWidget(oldWidget);
     if (!listEquals(oldWidget.paths, widget.paths) ||
         oldWidget.enableFirestoreFallback != widget.enableFirestoreFallback ||
-        oldWidget.fallbackOrderId != widget.fallbackOrderId ||
-        oldWidget.maxItems != widget.maxItems ||
-        oldWidget.uploadedOnly != widget.uploadedOnly) {
+        oldWidget.fallbackOrderId != widget.fallbackOrderId) {
       _scheduleFutures();
     }
   }
@@ -3334,48 +4395,27 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
       return;
     }
     _fallbackPhotosFuture = null;
-    final initial = widget.paths
+    final renderable = widget.paths
         .map((p) => p.trim())
         .where(_isAllowedForDisplay)
-        .take(widget.maxItems ?? widget.paths.length)
         .toList(growable: false);
-    _lastInitial = initial;
-    _displayPathsFuture = initial.isEmpty
+    _lastRenderable = renderable;
+    _displayPathsFuture = renderable.isEmpty
         ? Future.value(const <String>[])
-        : _validDisplayPaths(context, initial);
+        : _validDisplayPaths(renderable);
   }
 
-  bool _isAllowedForDisplay(String raw) {
-    if (!_SubmittedPhotosStrip._isUsablePhotoRef(raw)) return false;
-    if (!widget.uploadedOnly) return true;
-
-    final value = raw.trim().toLowerCase();
-    if (value.startsWith('assets/')) return false;
-    if (value.startsWith('file://')) return false;
-    if (value.startsWith('data:image/')) return false;
-
-    return value.startsWith('http://') ||
-        value.startsWith('https://') ||
-        value.startsWith('gs://') ||
-        value.startsWith('company_custom_requests/') ||
-        value.startsWith('client_custom_requests/') ||
-        value.startsWith('clients/') ||
-        value.startsWith('artists/') ||
-        value.startsWith('client_artists/') ||
-        value.startsWith('company/') ||
-        (!value.contains('://') && value.contains('/'));
-  }
+  bool _isAllowedForDisplay(String raw) =>
+      _SubmittedPhotosStrip._isUsablePhotoRef(raw);
 
   Future<List<String>> _loadFallbackPhotos() async {
     final orderId = widget.fallbackOrderId.trim();
     if (orderId.isEmpty) return const <String>[];
-
     final root = await _supabaseFetchOrderRow(
       widget.fallbackOrderId,
       orderNumber: widget.fallbackOrderNumber,
     );
     if (root == null) return const <String>[];
-
     final payload = _asMap(root['payload']);
     final requestDetails =
         (payload['requestDetails'] as Map<String, dynamic>?) ??
@@ -3383,7 +4423,6 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     final order =
         (payload['order'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
-
     final collected = _SubmittedPhotosStrip._collectPhotoRefs(<dynamic>[
       payload['brandInspirationPhotos'],
       payload['inspirationPhotos'],
@@ -3391,6 +4430,8 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
       payload['photos'],
       payload['inspirationPhoto'],
       payload['inspirationPhotoUrl'],
+      payload['previewImage'],
+      payload['previewImageAsset'],
       requestDetails['brandInspirationPhotos'],
       requestDetails['inspirationPhotos'],
       requestDetails['clientImages'],
@@ -3399,18 +4440,24 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
       requestDetails['inspirationPhotoUrl'],
       requestDetails['inspirationPhotoUrls'],
       requestDetails['inspirationPhotoRefs'],
+      requestDetails['previewImage'],
+      requestDetails['previewImageAsset'],
       order['brandInspirationPhotos'],
       order['inspirationPhotos'],
       order['clientImages'],
       order['photos'],
       order['inspirationPhoto'],
       order['inspirationPhotoUrl'],
+      order['previewImage'],
+      order['previewImageAsset'],
       root['brandInspirationPhotos'],
       root['inspirationPhotos'],
       root['clientImages'],
       root['photos'],
       root['inspirationPhoto'],
       root['inspirationPhotoUrl'],
+      root['previewImage'],
+      root['previewImageAsset'],
     ]);
 
     String firstNonEmpty(List<Object?> values) {
@@ -3443,7 +4490,6 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
       if (companyUid.isNotEmpty) 'company-custom-requests/$companyUid/$orderId',
       'company-custom-requests/unknown/$orderId',
     ];
-
     for (final folder in baseFolders) {
       try {
         final storage = _client.storage.from('company-custom-requests');
@@ -3474,7 +4520,10 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
             if (size != null && size <= 0) continue;
           } catch (_) {}
           final fullPath = '$folder/$name';
-          folderRefs.add(_normalizeStorageUrl(fullPath));
+          final normalized = _normalizeStorageUrl(fullPath);
+          if (_SubmittedPhotosStrip._isUsablePhotoRef(normalized)) {
+            folderRefs.add(normalized);
+          }
         }
       } catch (_) {}
     }
@@ -3515,89 +4564,6 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
     return ResizeImage(FileImage(File(p)), width: 300, height: 300);
   }
 
-  ({String bucket, String objectPath})? _parseStorageReference(String raw) {
-    var value = raw.trim();
-    if (value.isEmpty) return null;
-
-    if (value.startsWith('gs://')) {
-      value = value.substring(5);
-      final slash = value.indexOf('/');
-      if (slash < 0 || slash + 1 >= value.length) return null;
-      return (
-        bucket: value.substring(0, slash),
-        objectPath: value.substring(slash + 1),
-      );
-    }
-
-    if (value.startsWith('storage/v1/object/public/')) {
-      value = value.substring('storage/v1/object/public/'.length);
-    }
-
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      final uri = Uri.tryParse(value);
-      if (uri == null) return null;
-      if (!uri.host.contains('supabase.co')) return null;
-      final segments = uri.pathSegments;
-      final index = segments.indexOf('public');
-      if (index >= 0 && index + 2 <= segments.length) {
-        final bucket = segments[index + 1];
-        final objectPath = Uri.decodeComponent(
-          segments.sublist(index + 2).join('/'),
-        );
-        if (bucket.isNotEmpty && objectPath.isNotEmpty) {
-          return (bucket: bucket, objectPath: objectPath);
-        }
-      }
-      return null;
-    }
-
-    value = value.replaceAll(RegExp(r'^/+'), '');
-    final parts = value.split('/');
-    if (parts.length < 2) return null;
-    return (bucket: parts.first, objectPath: parts.skip(1).join('/'));
-  }
-
-  Future<bool> _storageObjectExists(String raw) async {
-    try {
-      final parsed = _parseStorageReference(raw);
-      if (parsed == null) return true;
-      final objectPath = parsed.objectPath.trim();
-      if (objectPath.isEmpty) return false;
-      final lastSlash = objectPath.lastIndexOf('/');
-      final folder = lastSlash >= 0 ? objectPath.substring(0, lastSlash) : '';
-      final fileName = lastSlash >= 0
-          ? objectPath.substring(lastSlash + 1)
-          : objectPath;
-      if (fileName.isEmpty) return false;
-
-      final items = await Supabase.instance.client.storage
-          .from(parsed.bucket)
-          .list(path: folder);
-      for (final item in _asList(items)) {
-        final name = _firstNonEmpty([
-          (() {
-            try {
-              return item.name;
-            } catch (_) {
-              return null;
-            }
-          })(),
-          (() {
-            try {
-              return item.path;
-            } catch (_) {
-              return null;
-            }
-          })(),
-        ]);
-        if (name.trim() == fileName) return true;
-      }
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<String> _resolveDisplayPath(String raw) async {
     var p = raw.trim();
     for (var j = 0; j < 3; j++) {
@@ -3612,13 +4578,8 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
         p.startsWith('data:image/') ||
         p.startsWith('file://')) {
       if (!_isAllowedForDisplay(p)) return '';
-      final parsedStorage = _parseStorageReference(p);
-      if (parsedStorage != null && !await _storageObjectExists(p)) {
-        return '';
-      }
       return p;
     }
-
     final looksStoragePath =
         p.startsWith('gs://') ||
         p.startsWith('company_custom_requests/') ||
@@ -3628,126 +4589,82 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
         p.startsWith('client_artists/') ||
         p.startsWith('company/') ||
         (!p.contains('://') && p.contains('/'));
-
     if (looksStoragePath) {
       final resolved = await StorageUrlResolver.resolve(p);
       final text = (resolved ?? '').trim();
-      if (text.isNotEmpty &&
-          _isAllowedForDisplay(text) &&
-          await _storageObjectExists(p)) {
+      if (_isAllowedForDisplay(text) &&
+          (text.startsWith('http://') ||
+              text.startsWith('https://') ||
+              text.startsWith('assets/') ||
+              text.startsWith('data:image/') ||
+              text.startsWith('file://'))) {
         return text;
       }
     }
-
     final resolved = await StorageUrlResolver.resolve(p);
     final text = (resolved ?? '').trim();
-    if (!_isAllowedForDisplay(text)) return '';
-    if (!(text.startsWith('http://') ||
-        text.startsWith('https://') ||
-        text.startsWith('assets/') ||
-        text.startsWith('data:image/') ||
-        text.startsWith('file://'))) {
-      return '';
+    if (_isAllowedForDisplay(text) &&
+        (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('assets/') ||
+            text.startsWith('data:image/') ||
+            text.startsWith('file://'))) {
+      return text;
     }
-    final parsedStorage = _parseStorageReference(text);
-    if (parsedStorage != null && !await _storageObjectExists(text)) {
-      return '';
-    }
-    return text;
+    return '';
   }
 
-  Future<List<String>> _validDisplayPaths(
-    BuildContext context,
-    List<String> rawPaths,
-  ) async {
+  Future<List<String>> _validDisplayPaths(List<String> rawPaths) async {
     final seen = <String>{};
     final valid = <String>[];
-    final limit = widget.maxItems;
 
     for (final raw in rawPaths) {
-      if (limit != null && valid.length >= limit) break;
       final resolved = await _resolveDisplayPath(raw);
-      if (resolved.isEmpty) continue;
-      if (!seen.add(resolved)) continue;
+      if (resolved.isEmpty || !seen.add(resolved)) continue;
 
       try {
-        if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
-          await NetworkAssetBundle(Uri.parse(resolved)).load(resolved);
-        }
         await precacheImage(_providerFor(resolved), context);
         valid.add(resolved);
       } catch (_) {
-        // Do not reserve a grid cell for broken/invalid image refs.
+        // Broken image refs should not reserve an empty tile.
       }
     }
 
     return valid;
   }
 
-  Widget _emptyMessage() {
-    return Text(
-      'No photos were uploaded by Brand.',
-      style: TextStyle(
-        color: AppColors.blackCat.withValues(alpha: 0.62),
-        fontWeight: FontWeight.w500,
-        fontSize: 12,
-      ),
-    );
-  }
-
-  Widget _buildTile(BuildContext context, String path, {required double size}) {
+  Widget _buildTile(String resolved, {required double size}) {
     // No FutureBuilder/precacheImage wrapper here: _validDisplayPaths()
     // already awaited precacheImage for this exact path before including it
     // in the resolved list, so the image is already in Flutter's image
-    // cache by the time a tile is built. Re-wrapping in a fresh
-    // FutureBuilder here recreated a new Future on every rebuild, which
-    // reset to its loading placeholder (a blank tile) on every unrelated
-    // rebuild of the page, even though the image was already cached.
-    final provider = _providerFor(path);
+    // cache by the time a tile is built.
+    final provider = _providerFor(resolved);
+
+    void openFullScreen() {
+      showDialog<void>(
+        context: context,
+        builder: (_) => _AccessibleOrderImagePreviewDialog(image: provider),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.zero,
-      child: InkWell(
-        onTap: () {
-          showDialog<void>(
-            context: context,
-            builder: (_) => Dialog(
-              backgroundColor: Colors.black,
-              insetPadding: const EdgeInsets.all(8),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: InteractiveViewer(
-                      minScale: 0.8,
-                      maxScale: 4,
-                      child: Center(
-                        child: Image(
-                          image: provider,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: AppColors.snow),
-                    ),
-                  ),
-                ],
+      child: Semantics(
+        button: true,
+        label: 'View photo full screen',
+        onTap: openFullScreen,
+        child: ExcludeSemantics(
+          child: InkWell(
+            onTap: openFullScreen,
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: Image(
+                image: provider,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
-          );
-        },
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Image(
-            image: provider,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
         ),
       ),
@@ -3758,7 +4675,7 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
   Widget build(BuildContext context) {
     final fallbackFuture = _fallbackPhotosFuture;
     if (fallbackFuture != null) {
-      final initial = _lastInitial;
+      final renderable = _lastRenderable;
       return FutureBuilder<List<String>>(
         future: fallbackFuture,
         builder: (context, snap) {
@@ -3766,28 +4683,40 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
               .map((e) => e.trim())
               .where(_isAllowedForDisplay)
               .toList(growable: false);
-          var merged = <String>{...initial, ...fetched}.toList(growable: false);
-          final limit = widget.maxItems;
-          if (limit != null && merged.length > limit) {
-            merged = merged.take(limit).toList(growable: false);
+          final merged = <String>{
+            ...renderable,
+            ...fetched,
+          }.toList(growable: false);
+          if (merged.isNotEmpty) {
+            return _SubmittedPhotosStrip(
+              paths: merged,
+              enableFirestoreFallback: false,
+              showAll: widget.showAll,
+            );
           }
-          if (snap.connectionState != ConnectionState.done && merged.isEmpty) {
-            return SizedBox(height: widget.showAll ? 96 : 120);
-          }
-          if (merged.isEmpty) return _emptyMessage();
-          return _SubmittedPhotosStrip(
-            paths: merged,
-            enableFirestoreFallback: false,
-            showAll: widget.showAll,
-            uploadedOnly: widget.uploadedOnly,
-            maxItems: widget.maxItems,
+          return Text(
+            'No photos were uploaded by Brand.',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.62),
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
           );
         },
       );
     }
 
     final displayFuture = _displayPathsFuture;
-    if (displayFuture == null) return _emptyMessage();
+    if (displayFuture == null) {
+      return Text(
+        'No photos were uploaded by Brand.',
+        style: TextStyle(
+          color: AppColors.blackCat.withValues(alpha: 0.62),
+          fontWeight: FontWeight.w500,
+          fontSize: 12,
+        ),
+      );
+    }
 
     return FutureBuilder<List<String>>(
       future: displayFuture,
@@ -3797,20 +4726,28 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
         }
 
         final displayPaths = snap.data ?? const <String>[];
-        if (displayPaths.isEmpty) return _emptyMessage();
+        if (displayPaths.isEmpty) {
+          return Text(
+            'No photos were uploaded by Brand.',
+            style: TextStyle(
+              color: AppColors.blackCat.withValues(alpha: 0.62),
+              fontWeight: FontWeight.w500,
+              fontSize: 12,
+            ),
+          );
+        }
 
         return LayoutBuilder(
           builder: (context, constraints) {
             final tileSize = widget.showAll
                 ? ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0)
                 : 120.0;
-
             if (widget.showAll) {
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: displayPaths
-                    .map((path) => _buildTile(context, path, size: tileSize))
+                    .map((path) => _buildTile(path, size: tileSize))
                     .toList(growable: false),
               );
             }
@@ -3822,7 +4759,7 @@ class _SubmittedPhotosStripState extends State<_SubmittedPhotosStrip> {
                 itemCount: displayPaths.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
                 itemBuilder: (_, i) =>
-                    _buildTile(context, displayPaths[i], size: tileSize),
+                    _buildTile(displayPaths[i], size: tileSize),
               ),
             );
           },
@@ -3859,6 +4796,18 @@ class _DeliveredReviewPanel extends StatefulWidget {
 class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   late final TextEditingController _commentCtrl;
   late final TextEditingController _customTipCtrl;
+  final FocusNode _reviewModalCloseFocusNode = FocusNode(
+    debugLabel: 'reviewTipModalClose',
+  );
+  final FocusNode _customTipFocusNode = FocusNode(
+    debugLabel: 'reviewTipCustomAmount',
+  );
+  final GlobalKey _reviewModalCloseSemanticsKey = GlobalKey(
+    debugLabel: 'reviewTipModalCloseA11y',
+  );
+  final GlobalKey _customTipSemanticsKey = GlobalKey(
+    debugLabel: 'reviewTipCustomAmountA11y',
+  );
   late double _rating;
   bool _saving = false;
   bool _promptProcessed = false;
@@ -3890,6 +4839,8 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   void dispose() {
     _commentCtrl.dispose();
     _customTipCtrl.dispose();
+    _reviewModalCloseFocusNode.dispose();
+    _customTipFocusNode.dispose();
     super.dispose();
   }
 
@@ -4432,27 +5383,69 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     } catch (_) {}
   }
 
+  void _announceReviewA11y(String message) {
+    if (!mounted) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      message,
+      Directionality.of(context),
+    );
+  }
+
+  Future<void> _focusReviewModalClose() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_reviewModalCloseFocusNode);
+    _reviewModalCloseSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+    if (!mounted) return;
+    _reviewModalCloseSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
+  Future<void> _focusCustomTip() async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    FocusScope.of(context).requestFocus(_customTipFocusNode);
+    _customTipSemanticsKey.currentContext
+        ?.findRenderObject()
+        ?.sendSemanticsEvent(const FocusSemanticEvent());
+  }
+
   Widget _tipOptionChip({
     required String label,
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      borderRadius: BorderRadius.zero,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      hint: selected ? 'Selected tip option' : 'Double tap to select tip option',
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.blackCat : AppColors.snow,
+      child: ExcludeSemantics(
+        child: InkWell(
           borderRadius: BorderRadius.zero,
-          border: Border.all(color: AppColors.blackCatLight),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.snow : AppColors.blackCat,
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.blackCat : AppColors.snow,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.blackCatLight),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? AppColors.snow : AppColors.blackCat,
+              ),
+            ),
           ),
         ),
       ),
@@ -4460,284 +5453,408 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
   }
 
   Future<void> _openReviewTipModal() async {
+    var initialFocusScheduled = false;
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      requestFocus: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, modalSetState) {
+            if (!initialFocusScheduled) {
+              initialFocusScheduled = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                unawaited(_focusReviewModalClose());
+              });
+            }
+
             Widget star(int index) {
-              final selected = _rating >= index;
-              return IconButton(
-                onPressed: () {
-                  setState(() => _rating = index.toDouble());
-                  modalSetState(() {});
-                },
-                icon: Icon(
-                  selected ? Icons.star_rounded : Icons.star_border_rounded,
-                  color: selected ? const Color(0xFFFFB000) : Colors.black54,
-                  size: 26,
+              final filled = _rating >= index;
+              final selected = _rating.round() == index;
+
+              void chooseRating() {
+                setState(() => _rating = index.toDouble());
+                modalSetState(() {});
+                _announceReviewA11y(
+                  '$index ${index == 1 ? 'star' : 'stars'} selected.',
+                );
+              }
+
+              return Semantics(
+                button: true,
+                selected: selected,
+                label: '$index ${index == 1 ? 'star' : 'stars'}',
+                hint: selected
+                    ? 'Selected rating'
+                    : 'Double tap to select this rating',
+                onTap: chooseRating,
+                child: ExcludeSemantics(
+                  child: IconButton(
+                    onPressed: chooseRating,
+                    icon: Icon(
+                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: filled
+                          ? const Color(0xFFFFB000)
+                          : Colors.black54,
+                      size: 26,
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               );
             }
 
             final bottomInset = MediaQuery.of(context).viewInsets.bottom;
             final calculatedTip = _calculatedTip;
 
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottomInset),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.snow,
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Review & Tip Your Artist',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Rate your delivered order, leave comments, and add an optional tip.',
-                          style: TextStyle(
-                            color: AppColors.blackCat.withValues(alpha: 0.62),
-                            fontSize: 12.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Text(
-                              'Artist Review Rating',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12.5,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ...List<Widget>.generate(5, (i) => star(i + 1)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: _commentCtrl,
-                          minLines: 3,
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            hintText: 'Write a quick review (optional)',
-                            isDense: true,
-                            filled: true,
-                            fillColor: AppColors.snow,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                            focusedBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.zero,
-                              borderSide: BorderSide(
-                                color: AppColors.blackCat,
-                                width: 1.4,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Tip (optional)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12.5,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _tipOptionChip(
-                              label: '5%',
-                              selected: _selectedTipPercent == 5,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 5);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '10%',
-                              selected: _selectedTipPercent == 10,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 10);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '15%',
-                              selected: _selectedTipPercent == 15,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 15);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: '20%',
-                              selected: _selectedTipPercent == 20,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = 20);
-                                modalSetState(() {});
-                              },
-                            ),
-                            _tipOptionChip(
-                              label: 'Custom',
-                              selected: _selectedTipPercent == null,
-                              onTap: () {
-                                setState(() => _selectedTipPercent = null);
-                                modalSetState(() {});
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        if (_selectedTipPercent == null)
-                          TextField(
-                            controller: _customTipCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            onChanged: (_) => modalSetState(() {}),
-                            decoration: InputDecoration(
-                              hintText: 'Custom tip amount (\$)',
-                              isDense: true,
-                              filled: true,
-                              fillColor: AppColors.snow,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat.withValues(
-                                    alpha: 0.08,
-                                  ),
-                                ),
-                              ),
-                              focusedBorder: const OutlineInputBorder(
-                                borderRadius: BorderRadius.zero,
-                                borderSide: BorderSide(
-                                  color: AppColors.blackCat,
-                                  width: 1.4,
-                                ),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 8),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F0FA),
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          child: Text(
-                            'Tip total: \$${calculatedTip.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 44,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.blackCat,
-                              foregroundColor: AppColors.snow,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
-                              ),
-                              elevation: 0,
-                            ),
-                            onPressed: _saving
-                                ? null
-                                : () async {
-                                    final success = await _submitReview();
-                                    if (success) {
-                                      final localNav = Navigator.of(
-                                        sheetContext,
-                                      );
-                                      if (localNav.canPop()) {
-                                        localNav.pop();
-                                      } else {
-                                        Navigator.of(
-                                          sheetContext,
-                                          rootNavigator: true,
-                                        ).pop();
-                                      }
-                                    }
-                                  },
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Text(
-                                    _submittedAt == null
-                                        ? 'Submit Review & Tip'
-                                        : 'Update Review & Tip',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+            return Semantics(
+              scopesRoute: true,
+              namesRoute: true,
+              explicitChildNodes: true,
+              label: 'Review and Tip Your Artist',
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.snow,
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Semantics(
+                                  sortKey: OrdinalSortKey(1),
+                                  header: true,
+                                  label: 'Review and Tip Your Artist',
+                                  child: ExcludeSemantics(
+                                    child: Text(
+                                      'Review & Tip Your Artist',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
                                     ),
                                   ),
+                                ),
+                              ),
+                              Semantics(
+                                key: _reviewModalCloseSemanticsKey,
+                                sortKey: OrdinalSortKey(0),
+                                button: true,
+                                label: 'Close Review and Tip',
+                                hint: 'Double tap to close',
+                                onTap: () => Navigator.of(sheetContext).pop(),
+                                child: ExcludeSemantics(
+                                  child: IconButton(
+                                    focusNode: _reviewModalCloseFocusNode,
+                                    tooltip: 'Close Review and Tip',
+                                    onPressed: () =>
+                                        Navigator.of(sheetContext).pop(),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                          Semantics(
+                            container: true,
+                            explicitChildNodes: true,
+                            sortKey: OrdinalSortKey(2),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rate your delivered order, leave comments, and add an optional tip.',
+                                  style: TextStyle(
+                                    color: AppColors.blackCat.withValues(
+                                      alpha: 0.62,
+                                    ),
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const _A11yHeading(
+                                  'Artist Review Rating',
+                                  fontSize: 12.5,
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 2,
+                                  children: List<Widget>.generate(
+                                    5,
+                                    (i) => star(i + 1),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  label: 'Review comments, optional',
+                                  textField: true,
+                                  child: TextField(
+                                    controller: _commentCtrl,
+                                    minLines: 3,
+                                    maxLines: 4,
+                                    decoration: InputDecoration(
+                                      hintText: 'Write a quick review (optional)',
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: AppColors.snow,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                        ),
+                                      ),
+                                      focusedBorder: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.zero,
+                                        borderSide: BorderSide(
+                                          color: AppColors.blackCat,
+                                          width: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const _A11yHeading(
+                                  'Tip, optional',
+                                  fontSize: 12.5,
+                                ),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _tipOptionChip(
+                                      label: '5%',
+                                      selected: _selectedTipPercent == 5,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 5,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '5 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '10%',
+                                      selected: _selectedTipPercent == 10,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 10,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '10 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '15%',
+                                      selected: _selectedTipPercent == 15,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 15,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '15 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: '20%',
+                                      selected: _selectedTipPercent == 20,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = 20,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          '20 percent tip selected.',
+                                        );
+                                      },
+                                    ),
+                                    _tipOptionChip(
+                                      label: 'Custom',
+                                      selected: _selectedTipPercent == null,
+                                      onTap: () {
+                                        setState(
+                                          () => _selectedTipPercent = null,
+                                        );
+                                        modalSetState(() {});
+                                        _announceReviewA11y(
+                                          'Custom tip selected.',
+                                        );
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                          if (!mounted) return;
+                                          unawaited(_focusCustomTip());
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                if (_selectedTipPercent == null)
+                                  Semantics(
+                                    key: _customTipSemanticsKey,
+                                    label: 'Custom tip amount, dollars',
+                                    textField: true,
+                                    child: TextField(
+                                      controller: _customTipCtrl,
+                                      focusNode: _customTipFocusNode,
+                                      keyboardType: const TextInputType
+                                          .numberWithOptions(decimal: true),
+                                      onChanged: (_) => modalSetState(() {}),
+                                      decoration: InputDecoration(
+                                        hintText: 'Custom tip amount (\$)',
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: AppColors.snow,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.08),
+                                          ),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat
+                                                .withValues(alpha: 0.08),
+                                          ),
+                                        ),
+                                        focusedBorder:
+                                            const OutlineInputBorder(
+                                          borderRadius: BorderRadius.zero,
+                                          borderSide: BorderSide(
+                                            color: AppColors.blackCat,
+                                            width: 1.4,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                                Semantics(
+                                  liveRegion: true,
+                                  label:
+                                      'Tip total, ${calculatedTip.toStringAsFixed(2)} dollars',
+                                  child: ExcludeSemantics(
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3F0FA),
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      child: Text(
+                                        'Tip total: \$${calculatedTip.toStringAsFixed(2)}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 48,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.blackCat,
+                                      foregroundColor: AppColors.snow,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: _saving
+                                        ? null
+                                        : () async {
+                                            final success =
+                                                await _submitReview();
+                                            if (success) {
+                                              final localNav = Navigator.of(
+                                                sheetContext,
+                                              );
+                                              if (localNav.canPop()) {
+                                                localNav.pop();
+                                              } else {
+                                                Navigator.of(
+                                                  sheetContext,
+                                                  rootNavigator: true,
+                                                ).pop();
+                                              }
+                                            }
+                                          },
+                                    child: _saving
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : Text(
+                                            _submittedAt == null
+                                                ? 'Submit Review & Tip'
+                                                : 'Update Review & Tip',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Semantics(
+                            sortKey: OrdinalSortKey(3),
+                            button: true,
+                            label: 'Close Review and Tip',
+                            onTap: () => Navigator.of(sheetContext).pop(),
+                            onDidGainAccessibilityFocus: () {
+                              unawaited(_focusReviewModalClose());
+                            },
+                            child: const SizedBox(height: 1, width: 1),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -4754,10 +5871,7 @@ class _DeliveredReviewPanelState extends State<_DeliveredReviewPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Delivered',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
+        const _A11yHeading('Delivered'),
         const SizedBox(height: 4),
         Text(
           'Delivered successfully. Add an Artist Review Rating and optional tip (charged from your bank account).',

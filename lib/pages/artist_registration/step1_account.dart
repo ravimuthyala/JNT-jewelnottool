@@ -6,10 +6,17 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../constants/currency_options.dart';
+import '../../services/address_validation_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/date_format_utils.dart';
 import '../../utils/registration_input_utils.dart';
+import '../../widgets/accessible_date_grid.dart';
+import '../../widgets/autocomplete_dropdown_sizing.dart';
+import '../../widgets/registration_date_of_birth_picker.dart';
 import '../../widgets/registration_profile_upload.dart';
+import '../../widgets/responsive_field_row.dart';
+import '../register_page.dart' show showRegisterModal;
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -25,8 +32,10 @@ class Step1Account extends StatefulWidget {
 class Step1AccountState extends State<Step1Account> {
   final _formKey = GlobalKey<FormState>();
 
+  late final TextEditingController _fullNameCtrl;
   late final TextEditingController _studioNameCtrl;
-  late final TextEditingController _displayNameCtrl;
+  late final TextEditingController _dateOfBirthCtrl;
+  DateTime? _dateOfBirth;
   late final TextEditingController _languageCtrl;
   late final TextEditingController _bioCtrl;
   late final TextEditingController _phoneCtrl;
@@ -39,6 +48,9 @@ class Step1AccountState extends State<Step1Account> {
   late final TextEditingController _addressCityCtrl;
   late final TextEditingController _zipCtrl;
   late final TextEditingController _manualStateCtrl;
+  List<AddressSuggestion> _streetSuggestions = const [];
+  bool _streetSuggestionsLoading = false;
+  Timer? _streetAutocompleteDebounce;
 
   String? _currency;
   String _phoneAreaCode = '+1';
@@ -114,8 +126,14 @@ class Step1AccountState extends State<Step1Account> {
   void initState() {
     super.initState();
     final draft = widget.draft;
+    _fullNameCtrl = TextEditingController(text: draft.fullName);
     _studioNameCtrl = TextEditingController(text: draft.studioName);
-    _displayNameCtrl = TextEditingController(text: draft.displayName);
+    _dateOfBirth = draft.dateOfBirth;
+    _dateOfBirthCtrl = TextEditingController(
+      text: draft.dateOfBirth == null
+          ? ''
+          : RegistrationInputUtils.formatDateOfBirth(draft.dateOfBirth!),
+    );
     _languageCtrl = TextEditingController(text: draft.languageSpoken);
     _bioCtrl = TextEditingController(text: draft.bio);
     _phoneCtrl = TextEditingController(text: draft.phone);
@@ -134,8 +152,10 @@ class Step1AccountState extends State<Step1Account> {
   @override
   void dispose() {
     _emailAvailabilityDebounce?.cancel();
+    _streetAutocompleteDebounce?.cancel();
+    _fullNameCtrl.dispose();
     _studioNameCtrl.dispose();
-    _displayNameCtrl.dispose();
+    _dateOfBirthCtrl.dispose();
     _languageCtrl.dispose();
     _bioCtrl.dispose();
     _phoneCtrl.dispose();
@@ -160,8 +180,12 @@ class Step1AccountState extends State<Step1Account> {
 
   void autofill() {
     setState(() {
+      _fullNameCtrl.text = 'Luna Rivera';
       _studioNameCtrl.text = 'Luna Nails Studio';
-      _displayNameCtrl.text = 'Luna Nails';
+      _dateOfBirth = DateTime(1995, 6, 15);
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
+        _dateOfBirth!,
+      );
       _languageCtrl.text = 'English';
       _currency = 'US Dollar (USD)';
       _bioCtrl.text =
@@ -176,6 +200,131 @@ class Step1AccountState extends State<Step1Account> {
       _country = 'United States';
       _emailCtrl.text = 'luna.nails@test.com';
     });
+  }
+
+  Future<void> _showAgeIneligibleDialog() async {
+    await showRegistrationAgeIneligibleDialog(context: context);
+    if (!mounted) return;
+    // Same "close registration, return to Home, reopen the role picker"
+    // sequence as the wizard's own X button (see JntModalAppBar.onClose in
+    // artist_registration_flow.dart) -- an ineligible DOB means this signup
+    // attempt can't continue, so send them back to the start rather than
+    // leaving them stuck on this step or bouncing to a login screen that
+    // doesn't apply (they don't have an account).
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    final currentRoute = ModalRoute.of(context);
+    rootNavigator.pop();
+    if (currentRoute != null) {
+      await currentRoute.completed;
+    }
+    if (!rootNavigator.mounted) return;
+    await showRegisterModal(rootNavigator.context);
+  }
+
+  Future<void> _pickDateOfBirth() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final selected = await showAccessibleDatePickerDialog(
+      context: context,
+      fieldLabel: 'Date of Birth',
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: today,
+      initialSelectedDate: _dateOfBirth ?? today,
+    );
+    if (selected == null || !mounted) return;
+
+    setState(() {
+      _dateOfBirth = selected;
+      _dateOfBirthCtrl.text = RegistrationInputUtils.formatDateOfBirth(
+        selected,
+      );
+    });
+
+    if (!RegistrationInputUtils.isEligibleByDateOfBirth(selected) && mounted) {
+      await _showAgeIneligibleDialog();
+    }
+  }
+
+  // Lets a sighted or screen-reader user type the date directly instead of
+  // requiring the calendar picker. Checks eligibility as soon as a complete,
+  // parseable date is typed -- matches the picker path so the ineligibility
+  // dialog fires right at the DOB field itself, not only later at submit.
+  // tryParseMmDdYyyy returns null for an incomplete in-progress string, so
+  // this doesn't fire on every keystroke, only once the date is complete.
+  void _onDateOfBirthTyped(String value) {
+    final parsed = tryParseMmDdYyyy(value);
+    setState(() => _dateOfBirth = parsed);
+    if (parsed != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(parsed) &&
+        mounted) {
+      _showAgeIneligibleDialog();
+    }
+  }
+
+  String? _dateOfBirthValidator(String? value) {
+    if (_dateOfBirth == null) return 'Date of Birth is required';
+    return null;
+  }
+
+  Future<void> _autofillAddressFromStreet() async {
+    _streetAutocompleteDebounce?.cancel();
+    final query = _addressLine1Ctrl.text.trim();
+    if (query.length < 3) {
+      if (!mounted) return;
+      setState(() {
+        _streetSuggestionsLoading = false;
+        _streetSuggestions = const [];
+      });
+      return;
+    }
+
+    setState(() => _streetSuggestionsLoading = true);
+    _streetAutocompleteDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () async {
+        final results =
+            await AddressValidationService.searchUsStreetSuggestions(query);
+        if (!mounted) return;
+        setState(() {
+          _streetSuggestionsLoading = false;
+          _streetSuggestions = results;
+        });
+      },
+    );
+  }
+
+  void _applyStreetSuggestion(AddressSuggestion selected) {
+    setState(() {
+      _addressLine1Ctrl.text = selected.street;
+      _addressCityCtrl.text = selected.city;
+      _zipCtrl.text = selected.zip;
+      _country = 'United States';
+      final resolved =
+          AddressValidationService.matchUsStateName(selected.state) ??
+          selected.state;
+      final matched = kUsStates.where((s) => s == resolved).toList();
+      _state = matched.isNotEmpty ? matched.first : null;
+      _manualStateCtrl.clear();
+      _streetSuggestions = const [];
+    });
+  }
+
+  /// Google Places predictions (see [AddressSuggestion.placeId]) carry only
+  /// display text, not structured fields -- resolve the full address before
+  /// applying it. Nominatim-backed suggestions (placeId null) apply
+  /// unchanged, synchronously.
+  Future<void> _selectStreetSuggestion(AddressSuggestion selected) async {
+    if (selected.placeId != null) {
+      final resolved = await AddressValidationService.resolvePlaceDetails(
+        selected.placeId!,
+      );
+      if (resolved != null) {
+        _applyStreetSuggestion(resolved);
+        return;
+      }
+    }
+    _applyStreetSuggestion(selected);
   }
 
   void _onEmailChanged(String value) {
@@ -240,10 +389,20 @@ class Step1AccountState extends State<Step1Account> {
     return const SizedBox.shrink();
   }
 
-  bool validateAndSave(RegistrationDraft draft) {
+  Future<bool> validateAndSave(RegistrationDraft draft) async {
     if (!(_formKey.currentState?.validate() ?? false)) return false;
+    // Field-level checks in _pickDateOfBirth/_onDateOfBirthTyped already
+    // show this dialog as soon as an ineligible date is entered -- this is
+    // a safety net for whatever value ended up in _dateOfBirth by the time
+    // "Next" is pressed (e.g. paste, or autofill).
+    if (_dateOfBirth != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(_dateOfBirth!)) {
+      await _showAgeIneligibleDialog();
+      return false;
+    }
+    draft.fullName = _fullNameCtrl.text.trim();
     draft.studioName = _studioNameCtrl.text.trim();
-    draft.displayName = _displayNameCtrl.text.trim();
+    draft.dateOfBirth = _dateOfBirth;
     draft.languageSpoken = _languageCtrl.text.trim();
     draft.currency = _currency ?? 'US Dollar (USD)';
     draft.bio = _bioCtrl.text.trim();
@@ -286,60 +445,93 @@ class Step1AccountState extends State<Step1Account> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _studioNameCtrl,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) => (value == null || value.trim().isEmpty)
-                      ? 'Full Name / Studio Name is required'
-                      : null,
-                  decoration: regDec(
-                    'Full Name / Studio Name',
-                    'Full Name / Studio Name',
-                  ),
-                  style: fieldStyle,
-                  ),
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    Semantics(
+                      isRequired: true,
+                      child: TextFormField(
+                        controller: _fullNameCtrl,
+                        textInputAction: TextInputAction.next,
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty)
+                            ? 'Full Name is required'
+                            : null,
+                        decoration: regDec('Full Name', 'Full Name'),
+                        style: fieldStyle,
+                      ),
+                    ),
+                    Semantics(
+                      isRequired: true,
+                      child: TextFormField(
+                        controller: _studioNameCtrl,
+                        textInputAction: TextInputAction.next,
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty)
+                            ? 'Studio Name is required'
+                            : null,
+                        decoration: regDec('Studio Name', 'Studio Name'),
+                        style: fieldStyle,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: kFieldGap),
                 Semantics(
                   isRequired: true,
                   child: TextFormField(
-                  controller: _displayNameCtrl,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) => (value == null || value.trim().isEmpty)
-                      ? 'Display Name is required'
-                      : null,
-                  decoration: regDec('Display Name', 'Display Name'),
-                  style: fieldStyle,
+                    controller: _dateOfBirthCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [DateOfBirthTextInputFormatter()],
+                    style: fieldStyle,
+                    onChanged: _onDateOfBirthTyped,
+                    decoration: regDec(
+                      'Date of Birth',
+                      'MM/DD/YYYY',
+                      suffixIcon: IconButton(
+                        tooltip: 'Pick date of birth',
+                        onPressed: _pickDateOfBirth,
+                        icon: const Icon(
+                          Icons.calendar_today_outlined,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                    validator: _dateOfBirthValidator,
                   ),
                 ),
                 const SizedBox(height: kFieldGap),
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _languageCtrl,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) => (value == null || value.trim().isEmpty)
-                      ? 'Language is required'
-                      : null,
-                  decoration: regDec(
-                    'Language(s) Spoken',
-                    'e.g. English, Spanish',
-                  ),
-                  style: fieldStyle,
-                  ),
-                ),
-                const SizedBox(height: kFieldGap),
-                RegTypeAheadField(
-                  label: 'Currency *',
-                  hint: 'Select currency',
-                  options: currencyOptions,
-                  selectedValue: _currency,
-                  onChanged: (value) => setState(() => _currency = value),
-                  validator: (value) => (value == null || value.trim().isEmpty)
-                      ? 'Currency is required'
-                      : null,
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    Semantics(
+                      isRequired: true,
+                      child: TextFormField(
+                        controller: _languageCtrl,
+                        textInputAction: TextInputAction.next,
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty)
+                            ? 'Language is required'
+                            : null,
+                        decoration: regDec(
+                          'Language(s) Spoken',
+                          'e.g. English, Spanish',
+                        ),
+                        style: fieldStyle,
+                      ),
+                    ),
+                    RegTypeAheadField(
+                      label: 'Currency *',
+                      hint: 'Select currency',
+                      options: currencyOptions,
+                      selectedValue: _currency,
+                      onChanged: (value) => setState(() => _currency = value),
+                      validator: (value) =>
+                          (value == null || value.trim().isEmpty)
+                          ? 'Currency is required'
+                          : null,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: kFieldGap),
                 FormField<String>(
@@ -492,11 +684,58 @@ class Step1AccountState extends State<Step1Account> {
                   controller: _addressLine1Ctrl,
                   style: const TextStyle(fontSize: kInputFs),
                   decoration: regDec('Street Address', 'Enter Street Address'),
+                  onChanged: (_) => _autofillAddressFromStreet(),
                   validator: (v) => (v ?? '').trim().isEmpty
                       ? 'Street Address is required'
                       : null,
                   ),
                 ),
+                if (_streetSuggestionsLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                if (_streetSuggestions.isNotEmpty)
+                  Builder(
+                    builder: (context) {
+                      final suggestionCount = _streetSuggestions.length;
+                      final menuHeight = AutocompleteDropdownSizing.menuHeight(
+                        itemCount: suggestionCount,
+                        itemExtent: 40,
+                      );
+                      return Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.snow,
+                          borderRadius: BorderRadius.zero,
+                          border: Border.all(
+                            color: AppColors.blackCat.withValues(alpha: 0.20),
+                          ),
+                        ),
+                        constraints: BoxConstraints(maxHeight: menuHeight),
+                        child: ListView.separated(
+                          shrinkWrap: AutocompleteDropdownSizing.shrinkWrap(
+                            suggestionCount,
+                          ),
+                          physics: AutocompleteDropdownSizing.scrollPhysics(
+                            suggestionCount,
+                          ),
+                          itemCount: suggestionCount,
+                          separatorBuilder: (_, _) => const Divider(height: 1),
+                          itemBuilder: (_, i) => ListTile(
+                            dense: true,
+                            title: Text(
+                              _streetSuggestions[i].displayLabel,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            onTap: () => _selectStreetSuggestion(
+                              _streetSuggestions[i],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 const SizedBox(height: 12),
                 regRequiredLabel('City'),
                 const SizedBox(height: 6),
@@ -511,74 +750,92 @@ class Step1AccountState extends State<Step1Account> {
                   ),
                 ),
                 const SizedBox(height: kFieldGap),
-                if (_isUS)
-                  regRequiredLabel('State')
-                else
-                  const Text(
-                    'State / Region',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat,
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isUS)
+                          regRequiredLabel('State')
+                        else
+                          const Text(
+                            'State / Region',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        if (_isUS)
+                          RegTypeAheadField(
+                            label: 'State',
+                            hint: 'Select State',
+                            options: kUsStates,
+                            selectedValue: _state,
+                            onChanged: (v) => setState(() => _state = v),
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'State is required'
+                                : null,
+                          )
+                        else
+                          Semantics(
+                            isRequired: true,
+                            child: TextFormField(
+                              controller: _manualStateCtrl,
+                              style: const TextStyle(fontSize: kInputFs),
+                              decoration: regDec(
+                                'State / Region',
+                                'Enter State / Region',
+                              ),
+                              validator: (v) => (v ?? '').trim().isEmpty
+                                  ? 'State / Region is required'
+                                  : null,
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                const SizedBox(height: 6),
-                if (_isUS)
-                  RegTypeAheadField(
-                    label: 'State',
-                    hint: 'Select State',
-                    options: kUsStates,
-                    selectedValue: _state,
-                    onChanged: (v) => setState(() => _state = v),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'State is required'
-                        : null,
-                  )
-                else
-                  Semantics(
-                    isRequired: true,
-                    child: TextFormField(
-                    controller: _manualStateCtrl,
-                    style: const TextStyle(fontSize: kInputFs),
-                    decoration: regDec(
-                      'State / Region',
-                      'Enter State / Region',
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isUS)
+                          regRequiredLabel('Zip Code')
+                        else
+                          const Text(
+                            'Zip Code',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.blackCat,
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _zipCtrl,
+                            style: const TextStyle(fontSize: kInputFs),
+                            keyboardType: TextInputType.text,
+                            decoration: regDec('Zip Code', 'Enter Zip Code'),
+                            validator: (v) {
+                              final val = (v ?? '').trim();
+                              if (val.isEmpty) return 'Zip Code is required';
+                              if (!_isUS) return null;
+                              if (!RegExp(
+                                r'^\d{5}(-\d{4})?$',
+                              ).hasMatch(val)) {
+                                return 'Enter a valid ZIP code';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    validator: (v) => (v ?? '').trim().isEmpty
-                        ? 'State / Region is required'
-                        : null,
-                    ),
-                  ),
-                const SizedBox(height: kFieldGap),
-                if (_isUS)
-                  regRequiredLabel('Zip Code')
-                else
-                  const Text(
-                    'Zip Code',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.blackCat,
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _zipCtrl,
-                  style: const TextStyle(fontSize: kInputFs),
-                  keyboardType: TextInputType.text,
-                  decoration: regDec('Zip Code', 'Enter Zip Code'),
-                  validator: (v) {
-                    final val = (v ?? '').trim();
-                    if (val.isEmpty) return 'Zip Code is required';
-                    if (!_isUS) return null;
-                    if (!RegExp(r'^\d{5}(-\d{4})?$').hasMatch(val)) {
-                      return 'Enter a valid ZIP code';
-                    }
-                    return null;
-                  },
-                  ),
+                  ],
                 ),
                 const SizedBox(height: kFieldGap),
                 regRequiredLabel('Country'),

@@ -9,10 +9,14 @@ import '../../config/auth_flags.dart';
 import '../../services/auth_email_alias_service.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/registration_input_utils.dart';
+import '../../utlis/responsive_layout.dart';
 import '../../widgets/jnt_modal_app_bar.dart';
+import '../../widgets/registration_date_of_birth_picker.dart';
 import '../artist_login_page.dart';
 import '../artist_shell_page.dart';
 import '../email_verification_pending_page.dart';
+import '../register_page.dart' show showRegisterModal;
 import '_widgets/continue_button.dart';
 import '_widgets/reg_helpers.dart';
 import '_widgets/step_progress_bar.dart';
@@ -51,6 +55,22 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
   final _step4Key = GlobalKey<Step4CredentialsState>();
   final _step5Key = GlobalKey<Step5BundleAccountState>();
 
+  @override
+  void initState() {
+    super.initState();
+    // This flow has been reflowed for tablet (ResponsiveFieldRow pairs
+    // fields side by side in the step widgets), so it opts into the wider
+    // tablet frame instead of the standard 520px cap. Reset in dispose so
+    // pages reached afterward (e.g. '/register') get the standard cap back.
+    tabletFrameWidthOverride.value = kTabletWideFrameMaxWidth;
+  }
+
+  @override
+  void dispose() {
+    tabletFrameWidthOverride.value = null;
+    super.dispose();
+  }
+
   void _onBack() {
     if (_currentStep == 1) {
       Navigator.of(context).pop();
@@ -59,10 +79,12 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
     }
   }
 
-  void _onContinue() {
+  Future<void> _onContinue() async {
     switch (_currentStep) {
       case 1:
-        if (_step1Key.currentState?.validateAndSave(_draft) != true) return;
+        if (await _step1Key.currentState?.validateAndSave(_draft) != true) {
+          return;
+        }
         setState(() => _currentStep = 2);
         return;
       case 2:
@@ -79,23 +101,26 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         return;
       case 5:
         if (_step5Key.currentState?.validateAndSave(_draft) != true) return;
+        // Safety net -- Step1Account already checks eligibility immediately
+        // at the DOB field itself (both picker and typed entry), but this
+        // guards the actual signup call in case _draft.dateOfBirth is ever
+        // reached in an unexpected state.
+        final dob = _draft.dateOfBirth;
+        if (dob != null && !RegistrationInputUtils.isEligibleByDateOfBirth(dob)) {
+          await showRegistrationAgeIneligibleDialog(context: context);
+          if (!mounted) return;
+          final rootNavigator = Navigator.of(context, rootNavigator: true);
+          final currentRoute = ModalRoute.of(context);
+          rootNavigator.pop();
+          if (currentRoute != null) {
+            await currentRoute.completed;
+          }
+          if (!rootNavigator.mounted) return;
+          await showRegisterModal(rootNavigator.context);
+          return;
+        }
         _submit();
         return;
-    }
-  }
-
-  void _autofillCurrentStep() {
-    switch (_currentStep) {
-      case 1:
-        _step1Key.currentState?.autofill();
-      case 2:
-        _step2Key.currentState?.autofill();
-      case 3:
-        _step3Key.currentState?.autofill();
-      case 4:
-        _step4Key.currentState?.autofill();
-      case 5:
-        _step5Key.currentState?.autofill();
     }
   }
 
@@ -235,14 +260,15 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
         'accountType': 'artist',
         'profile': {
           ...Map<String, dynamic>.from(payload['profile'] as Map),
-          'displayName': _draft.displayName.trim(),
+          'displayName': _draft.fullName.trim(),
           'studioName': _draft.studioName.trim(),
-          'name': _draft.displayName.trim().isNotEmpty
-              ? _draft.displayName.trim()
+          'name': _draft.fullName.trim().isNotEmpty
+              ? _draft.fullName.trim()
               : _draft.studioName.trim(),
-          'fullName': _draft.displayName.trim().isNotEmpty
-              ? _draft.displayName.trim()
+          'fullName': _draft.fullName.trim().isNotEmpty
+              ? _draft.fullName.trim()
               : _draft.studioName.trim(),
+          'dateOfBirth': _draft.dateOfBirth?.toIso8601String(),
           'profileImageUrl': profilePhotoUrl.trim(),
           'profilePhotoUrl': profilePhotoUrl.trim(),
           'photoUrl': profilePhotoUrl.trim(),
@@ -252,6 +278,17 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       final supabasePayload = _normalizeSupabasePayload(
         _sanitizeArtistTablePayload(directPayload),
       );
+      // _sanitizeArtistTablePayload strips 'fullName'/'studioName' from the
+      // top level (they're in unsupportedAliasKeys), and even if it didn't,
+      // _normalizeSupabasePayload's snake_case conversion would mangle them
+      // into 'full_name'/'studio_name' -- but public.artist's real columns
+      // are the case-preserved 'fullName'/'studioName' (confirmed via
+      // information_schema.columns), not snake_case. Set them directly on
+      // the final payload, after every transform step, so Full Name and
+      // Studio Name land in their own real top-level columns rather than
+      // only inside the nested profile JSONB above.
+      supabasePayload['fullName'] = _draft.fullName.trim();
+      supabasePayload['studioName'] = _draft.studioName.trim();
       final artistTable = Supabase.instance.client.from('artist');
       final existingArtist = await artistTable
           .select('id')
@@ -447,9 +484,14 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
     };
 
     final fullPhone = '${_draft.phoneAreaCode.trim()}${_draft.phone.trim()}';
-    final nameOrStudio = _draft.displayName.trim().isNotEmpty
-        ? _draft.displayName.trim()
-        : _draft.studioName.trim();
+    final fullName = _draft.fullName.trim();
+    final studioNameValue = _draft.studioName.trim();
+    // A single combined display string for columns/consumers that only ever
+    // expected one "name" value (e.g. wherever the app just shows "artist
+    // name" generically) -- fullName/studioName below are now genuinely
+    // separate columns per the split, this is just a sensible fallback for
+    // display purposes.
+    final nameOrStudio = fullName.isNotEmpty ? fullName : studioNameValue;
     final resolvedState = _draft.state ?? _draft.manualState.trim();
     final photo = profilePhotoUrl.trim();
 
@@ -461,11 +503,12 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       'updated_at': DateTime.now().toIso8601String(),
       'name': nameOrStudio,
       'nameOrStudio': nameOrStudio,
-      'displayName': _draft.displayName.trim(),
-      'displayname': _draft.displayName.trim(),
-      'fullName': nameOrStudio,
-      'studioName': _draft.studioName.trim(),
-      'studioname': _draft.studioName.trim(),
+      'displayName': fullName,
+      'displayname': fullName,
+      'fullName': fullName,
+      'studioName': studioNameValue,
+      'studioname': studioNameValue,
+      'dateOfBirth': _draft.dateOfBirth?.toIso8601String(),
       'bio': _draft.bio.trim(),
       'city': _draft.city.trim(),
       'state': resolvedState,
@@ -483,10 +526,10 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       'profileImageUrl': photo,
       'profileimageurl': photo,
       'profilePhotoUrl': photo,
-      'panel_studio_name': _draft.studioName.trim(),
-      'panel_display_name': _draft.displayName.trim(),
-      'panel_displayName': _draft.displayName.trim(),
-      'panel_fullName': nameOrStudio,
+      'panel_studio_name': studioNameValue,
+      'panel_display_name': fullName,
+      'panel_displayName': fullName,
+      'panel_fullName': fullName,
       'panel_nameOrStudio': nameOrStudio,
       'panel_name': nameOrStudio,
       'panel_email': email,
@@ -551,20 +594,17 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       'panel_agree_safety': _draft.agreeSafety,
       'panel_receive_updates': _draft.receiveUpdates,
       'profile': {
-        'studioName': _draft.studioName.trim(),
-        'displayName': _draft.displayName.trim(),
+        'studioName': studioNameValue,
+        'displayName': fullName,
         'languageSpoken': _draft.languageSpoken.trim(),
         'currency': _draft.currency.trim(),
         'photoUrl': photo,
         'avatarUrl': photo,
         'profileImageUrl': photo,
         'profilePhotoUrl': photo,
-        'name': _draft.displayName.trim().isNotEmpty
-            ? _draft.displayName.trim()
-            : _draft.studioName.trim(),
-        'fullName': _draft.displayName.trim().isNotEmpty
-            ? _draft.displayName.trim()
-            : _draft.studioName.trim(),
+        'name': nameOrStudio,
+        'fullName': fullName,
+        'dateOfBirth': _draft.dateOfBirth?.toIso8601String(),
         'phone': fullPhone,
         'phoneAreaCode': _draft.phoneAreaCode.trim(),
         'phoneLocal': _draft.phone.trim(),
@@ -650,10 +690,7 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       case 4:
         return Step4Credentials(key: _step4Key, draft: _draft);
       case 5:
-        return Step5BundleAccount(
-          key: _step5Key,
-          draft: _draft,
-        );
+        return Step5BundleAccount(key: _step5Key, draft: _draft);
       default:
         return const Center(child: Text('Coming soon'));
     }
@@ -667,87 +704,84 @@ class _ArtistRegistrationFlowState extends State<ArtistRegistrationFlow> {
       namesRoute: true,
       label: 'Artist registration',
       child: Scaffold(
-      backgroundColor: AppColors.snow,
-      appBar: JntModalAppBar(
-        onClose: () => Navigator.of(
-          context,
-          rootNavigator: true,
-        ).pushNamedAndRemoveUntil('/register', (route) => false),
-        closeTooltip: 'Close artist registration',
-        closeIcon: const Icon(Icons.close),
-        leadingWidth: 60,
-        leading: Tooltip(
-          message: 'Fill dummy data',
-          child: IconButton(
-            icon: const Icon(Icons.auto_fix_high),
-            iconSize: 20,
-            color: AppColors.blackCat,
-            onPressed: _autofillCurrentStep,
-            style: IconButton.styleFrom(
-              foregroundColor: AppColors.blackCat,
-              minimumSize: const Size(40, 40),
-              padding: const EdgeInsets.all(8),
-              shape: const RoundedRectangleBorder(),
+        backgroundColor: AppColors.snow,
+        appBar: JntModalAppBar(
+          onClose: () async {
+            // Return to the existing HomePage underneath this flow. Creating a
+            // replacement Home route and deleting the old one causes a delayed
+            // dispose callback that can snap the tablet layout back to phone
+            // width after the Create Account modal appears.
+            final rootNavigator = Navigator.of(context, rootNavigator: true);
+            final currentRoute = ModalRoute.of(context);
+            rootNavigator.pop();
+
+            // Open the same Create Account modal used by the Login screen only
+            // after Artist Registration has been completely removed.
+            if (currentRoute != null) {
+              await currentRoute.completed;
+            }
+            if (!rootNavigator.mounted) return;
+            await showRegisterModal(rootNavigator.context);
+          },
+          closeTooltip: 'Close artist registration',
+          closeIcon: const Icon(Icons.close),
+        ),
+        body: ColoredBox(
+          color: AppColors.snow,
+          child: SafeArea(
+            child: Column(
+              children: [
+                StepProgressBar(
+                  current: _currentStep,
+                  total: _totalSteps,
+                  stepLabels: _stepLabels,
+                  sectionSubtitle: '',
+                ),
+                Expanded(child: _buildCurrentStep()),
+                Container(
+                  color: AppColors.snow,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+                  child: Row(
+                    children: [
+                      if (_currentStep > 1) ...[
+                        SizedBox(
+                          height: 46,
+                          child: OutlinedButton(
+                            onPressed: _onBack,
+                            style: regSecondaryButtonStyle().copyWith(
+                              padding: WidgetStateProperty.all(
+                                const EdgeInsets.symmetric(horizontal: 20),
+                              ),
+                            ),
+                            child: Text(
+                              'Back',
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'Arial',
+                                    fontSize: 12,
+                                    color: AppColors.snow,
+                                  ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      ContinueButton(
+                        onTap: _onContinue,
+                        loading: _submitting,
+                        embedded: true,
+                        label: _currentStep == _totalSteps
+                            ? 'Create Account'
+                            : 'Continue',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-      ),
-      body: ColoredBox(
-        color: AppColors.snow,
-        child: SafeArea(
-          child: Column(
-            children: [
-              StepProgressBar(
-                current: _currentStep,
-                total: _totalSteps,
-                stepLabels: _stepLabels,
-                sectionSubtitle: '',
-              ),
-              Expanded(child: _buildCurrentStep()),
-              Container(
-                color: AppColors.snow,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-                child: Row(
-                  children: [
-                    if (_currentStep > 1) ...[
-                      SizedBox(
-                        height: 46,
-                        child: OutlinedButton(
-                          onPressed: _onBack,
-                          style: regSecondaryButtonStyle().copyWith(
-                            padding: WidgetStateProperty.all(
-                              const EdgeInsets.symmetric(horizontal: 20),
-                            ),
-                          ),
-                          child: Text(
-                            'Back',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Arial',
-                                  fontSize: 12,
-                                  color: AppColors.snow,
-                                ),
-                          ),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    ContinueButton(
-                      onTap: _onContinue,
-                      loading: _submitting,
-                      embedded: true,
-                      label: _currentStep == _totalSteps
-                          ? 'Create Account'
-                          : 'Continue',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
       ),
     );
   }

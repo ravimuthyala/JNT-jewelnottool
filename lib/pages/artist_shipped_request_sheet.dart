@@ -16,6 +16,7 @@ import '../widgets/group_client_measurements_tabs.dart';
 import '../widgets/request_modal_accessibility.dart';
 import '../utils/request_nfc_details_loader.dart';
 import '../utils/company_bio_loader.dart';
+import '../utlis/responsive_layout.dart';
 
 Future<void> showShippedRequestSheet({
   required BuildContext context,
@@ -26,6 +27,10 @@ Future<void> showShippedRequestSheet({
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: isTabletSize(MediaQuery.sizeOf(context))
+        ? const BoxConstraints(maxWidth: 1000)
+        : null,
     backgroundColor: Colors.transparent,
     builder: (_) => _ShippedRequestSheet(
       request: request,
@@ -118,6 +123,8 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
     });
   }
 
+  RealtimeChannel? _shippingLabelChannel;
+
   @override
   void initState() {
     super.initState();
@@ -132,10 +139,34 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
       _sentInitialCloseFocus = true;
       renderObject.sendSemanticsEvent(const FocusSemanticEvent());
     });
+    _listenForShippingLabelUpdates();
+  }
+
+  // _loadShipmentInfo() is invoked fresh from build() on every rebuild
+  // (FutureBuilder), so a bare setState here is enough to pull in whatever
+  // admin (or the artist on another device) just wrote to the row.
+  void _listenForShippingLabelUpdates() {
+    _shippingLabelChannel = _supabase
+        .channel('shipping-label-${widget.request.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: _requestTable,
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: widget.request.id,
+          ),
+          callback: (_) {
+            if (mounted) setState(() {});
+          },
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
+    _shippingLabelChannel?.unsubscribe();
     _closeButtonFocusNode.dispose();
     _shippedListController.dispose();
     super.dispose();
@@ -601,6 +632,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
   @override
   Widget build(BuildContext context) {
     final maxH = MediaQuery.of(context).size.height * 0.92;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final sheetMediaQuery = MediaQuery.of(context);
 
     final modalClientPhotos = _modalClientPhotos();
@@ -636,7 +668,12 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 Expanded(
                   child: ListView(
                     controller: _shippedListController,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding: EdgeInsets.fromLTRB(
+                      isTablet ? 24 : 16,
+                      0,
+                      isTablet ? 24 : 16,
+                      16,
+                    ),
                     children: [
                       _topHeroCentered(
                         request: widget.request,
@@ -672,7 +709,12 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
                 ),
 
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                  padding: EdgeInsets.fromLTRB(
+                    isTablet ? 24 : 16,
+                    10,
+                    isTablet ? 24 : 16,
+                    16,
+                  ),
                   child: _softBox(
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1500,7 +1542,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
               Expanded(
                 child: segment(
                   icon: Icons.nfc_rounded,
-                  text: 'NFC',
+                  text: 'JNT Tap',
                   alignment: Alignment.center,
                 ),
               ),
@@ -1882,7 +1924,7 @@ class _ShippedRequestSheetState extends State<_ShippedRequestSheet> {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,

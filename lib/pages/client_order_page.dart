@@ -9,6 +9,7 @@ import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/notifications_service.dart';
 import '../utils/date_format_utils.dart';
+import '../utlis/responsive_layout.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
@@ -274,10 +275,54 @@ class _SupabaseOrderService {
     final uid = (userUid ?? '').trim();
     final name = clientName.trim().toLowerCase();
 
-    Future<Map<String, Map<String, dynamic>>> loadDetails(String table) async {
-      final result = <String, Map<String, dynamic>>{};
+    // Server-side superset filter (see matches_client_ownership /
+    // get_*_for_client RPCs, supabase/migrations/20260910120000_*) so only
+    // rows that could plausibly belong to this client leave the database,
+    // instead of downloading every request on the platform. `belongs()`
+    // below still runs unchanged over the (now much smaller) result as the
+    // exact/final filter, so visible-order behavior is unchanged.
+    Future<List<Map<String, dynamic>>> fetchOwnedRows(String rpcName) async {
       try {
-        final rows = await _db.from(table).select();
+        final rows = await _db.rpc(
+          rpcName,
+          params: {
+            'p_emails': emails.toList(growable: false),
+            'p_uid': uid,
+            'p_name': name,
+          },
+        );
+        if (rows is! List) return const <Map<String, dynamic>>[];
+        return rows
+            .whereType<Map>()
+            .map((row) => asMap(row))
+            .toList(growable: false);
+      } catch (_) {
+        return const <Map<String, dynamic>>[];
+      }
+    }
+
+    final clientRowsRaw = await fetchOwnedRows(
+      'get_client_custom_requests_for_client',
+    );
+    final brandRowsRaw = await fetchOwnedRows(
+      'get_company_custom_requests_for_client',
+    );
+
+    Future<Map<String, Map<String, dynamic>>> loadDetailsFor(
+      String table,
+      Iterable<String> requestIds,
+    ) async {
+      final ids = requestIds
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      final result = <String, Map<String, dynamic>>{};
+      if (ids.isEmpty) return result;
+      try {
+        final rows = await _db.from(table).select().inFilter(
+          'request_id',
+          ids,
+        );
         for (final raw in rows) {
           final row = asMap(raw);
           final requestId = (row['request_id'] ?? '').toString().trim();
@@ -299,17 +344,19 @@ class _SupabaseOrderService {
       return result;
     }
 
-    final clientDetails = await loadDetails('client_custom_requests_details');
-    final brandDetails = await loadDetails('company_custom_requests_details');
+    final clientDetails = await loadDetailsFor(
+      'client_custom_requests_details',
+      clientRowsRaw.map((row) => (row['id'] ?? '').toString().trim()),
+    );
+    final brandDetails = await loadDetailsFor(
+      'company_custom_requests_details',
+      brandRowsRaw.map((row) => (row['id'] ?? '').toString().trim()),
+    );
 
-    Future<List<Map<String, dynamic>>> fetchMergedRows(
-      String table,
+    List<Map<String, dynamic>> mergeRows(
+      List<Map<String, dynamic>> rows,
       Map<String, Map<String, dynamic>> detailsById,
-    ) async {
-      final rows = await _db
-          .from(table)
-          .select()
-          .order('created_at', ascending: false);
+    ) {
       final out = <Map<String, dynamic>>[];
       for (final raw in rows) {
         final row = asMap(raw);
@@ -333,14 +380,8 @@ class _SupabaseOrderService {
       return out;
     }
 
-    final clientRows = await fetchMergedRows(
-      'client_custom_requests',
-      clientDetails,
-    );
-    final brandRows = await fetchMergedRows(
-      'company_custom_requests',
-      brandDetails,
-    );
+    final clientRows = mergeRows(clientRowsRaw, clientDetails);
+    final brandRows = mergeRows(brandRowsRaw, brandDetails);
 
     bool belongs(Map<String, dynamic> row) {
       final summary = asMap(row['summary']);
@@ -1409,21 +1450,55 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
     }
 
     unawaited(load());
-    final realtimeSub = Supabase.instance.client
-        .channel('client-orders-${effectiveEmail.hashCode}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'client_custom_requests',
-          callback: (_) => unawaited(load()),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'company_custom_requests',
-          callback: (_) => unawaited(load()),
-        )
-        .subscribe();
+
+    // One filtered channel per candidate ownership column instead of an
+    // unfiltered whole-table subscription, so another user's order activity
+    // no longer triggers this client's list to refetch. Group-order
+    // membership (JSON-only) can't be expressed as a realtime eq filter, so
+    // it's not covered here -- a manual pull-to-refresh still picks those
+    // up; the initial load() above already includes them via the RPC.
+    final realtimeChannels = <RealtimeChannel>[];
+    final uid = Supabase.instance.client.auth.currentUser?.id ?? '';
+    var channelIndex = 0;
+    void addFilteredChannel(String table, String column, String value) {
+      if (value.isEmpty) return;
+      channelIndex++;
+      final channel =
+          Supabase.instance.client
+              .channel('client-orders-${effectiveEmail.hashCode}-$channelIndex')
+              ..onPostgresChanges(
+                event: PostgresChangeEvent.all,
+                schema: 'public',
+                table: table,
+                filter: PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: column,
+                  value: value,
+                ),
+                callback: (_) => unawaited(load()),
+              );
+      realtimeChannels.add(channel);
+    }
+
+    for (final table in const [
+      'client_custom_requests',
+      'company_custom_requests',
+    ]) {
+      addFilteredChannel(table, 'client_email', effectiveEmail);
+      addFilteredChannel(table, 'selected_client_email', effectiveEmail);
+      addFilteredChannel(table, 'accepted_by_client_email', effectiveEmail);
+      if (authEmail.isNotEmpty && authEmail != effectiveEmail) {
+        addFilteredChannel(table, 'client_email', authEmail);
+        addFilteredChannel(table, 'selected_client_email', authEmail);
+        addFilteredChannel(table, 'accepted_by_client_email', authEmail);
+      }
+    }
+    addFilteredChannel('client_custom_requests', 'client_id', uid);
+    addFilteredChannel('client_custom_requests', 'client_uid', uid);
+
+    for (final channel in realtimeChannels) {
+      channel.subscribe();
+    }
 
     _submittedRequestsSub = controller.stream.listen(
       (items) {
@@ -1459,7 +1534,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       _submittedRequestsSub!,
       onCancelExtra: () async {
         cancelled = true;
-        await Supabase.instance.client.removeChannel(realtimeSub);
+        for (final channel in realtimeChannels) {
+          await Supabase.instance.client.removeChannel(channel);
+        }
         await controller.close();
       },
     );
@@ -1507,6 +1584,9 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
       if (terminal) continue;
       final sourceCollection = req.sourceCollection.trim();
       final isBrandRequest = sourceCollection == 'Company_Custom_Requests';
+      // An order an artist already picked up never auto-expires, brand or not.
+      final artistAccepted = req.acceptedByArtistEmail.trim().isNotEmpty;
+      if (artistAccepted) continue;
       final acceptBy = req.requestAcceptBy ?? req.needBy;
       final pastAcceptBy =
           acceptBy != null &&
@@ -1517,16 +1597,24 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
               acceptBy.day,
             ).add(const Duration(days: 1)),
           );
+      final due = req.needBy;
+      final pastDue =
+          due != null &&
+          now.isAfter(
+            DateTime(
+              due.year,
+              due.month,
+              due.day,
+            ).add(const Duration(days: 1)),
+          );
       if (!isBrandRequest) {
-        final artistAccepted = req.acceptedByArtistEmail.trim().isNotEmpty;
-        if (artistAccepted) continue;
-        final due = req.needBy;
-        if (due == null) continue;
-        final pastDue = now.isAfter(
-          DateTime(due.year, due.month, due.day).add(const Duration(days: 1)),
-        );
-        if (!pastDue) continue;
+        if (due == null || !pastDue) continue;
       } else {
+        // Brand requests have two deadlines: the earlier accept-by date
+        // gates whether any client has taken the request at all, and the
+        // later need-by date gates whether an artist has, once a client
+        // has. Re-checked precisely (incl. group acceptance) below, once
+        // the current row is fetched -- this is just the cheap pre-filter.
         if (!pastAcceptBy) continue;
       }
 
@@ -1551,6 +1639,27 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           current['acceptedByClientEmail'],
           req.acceptedByClientEmail,
         ]).toLowerCase();
+
+        if (isBrandRequest) {
+          final currentDetails = _SupabaseOrderService.asMap(
+            current['details'],
+          );
+          final currentPayload = _SupabaseOrderService.asMap(
+            current['payload'],
+          );
+          final hasAnyClientAcceptance =
+              acceptedClientEmail.isNotEmpty ||
+              <Object?>[
+                current['acceptedGroupClientEmails'],
+                current['accepted_group_client_emails'],
+                currentDetails['acceptedGroupClientEmails'],
+                currentPayload['acceptedGroupClientEmails'],
+              ].any((value) => value is List && value.isNotEmpty);
+          // At least one client is in -- the request now runs on the
+          // need-by date, waiting on an artist, not the accept-by date.
+          if (hasAnyClientAcceptance && !pastDue) continue;
+        }
+
         final currentStatus = ((current['status'] ?? '') as Object)
             .toString()
             .trim()
@@ -1560,7 +1669,7 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
             : (acceptBy == null
                   ? ''
                   : '${acceptBy.month.toString().padLeft(2, '0')}/${acceptBy.day.toString().padLeft(2, '0')}/${acceptBy.year}');
-        final cancellationReason = isBrandRequest
+        final expirationReason = isBrandRequest
             ? 'Request was not accepted/rejected by $acceptByLabel'
             : 'Request was not accepted by artist, and it is past due.';
         if (currentStatus == 'expired' &&
@@ -1573,10 +1682,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         }
         final nowIso = DateTime.now().toIso8601String();
         final updatePayload = <String, dynamic>{
-          'status': isBrandRequest ? 'cancelled' : 'expired',
-          if (isBrandRequest) 'cancel_reason': cancellationReason,
-          if (isBrandRequest) 'cancelled_at': nowIso,
-          if (!isBrandRequest) 'expired_at': nowIso,
+          'status': 'expired',
+          'expired_at': nowIso,
           'expired_notified_client': true,
           if (isBrandRequest) 'expired_notified_brand_admin': true,
           if (isBrandRequest && acceptedClientEmail.isNotEmpty)
@@ -1586,12 +1693,8 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
         final details = _SupabaseOrderService.asMap(current['details']);
         final payload = _SupabaseOrderService.asMap(current['payload']);
         details.addAll(<String, dynamic>{
-          'status': isBrandRequest ? 'cancelled' : 'expired',
-          if (isBrandRequest) 'cancelReason': cancellationReason,
-          if (isBrandRequest) 'cancelledAt': nowIso,
-          if (!isBrandRequest)
-            'expiredReason':
-                'Request was not accepted by artist, and it is past due.',
+          'status': 'expired',
+          'expiredReason': expirationReason,
         });
         payload.addAll(details);
         updatePayload['details'] = details;
@@ -1637,14 +1740,14 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           for (final brandEmail in brandRecipientEmails) {
             await NotificationsService.createUserNotification(
               receiverEmail: brandEmail,
-              title: 'Brand Request Cancelled',
+              title: 'Brand Request Expired',
               body:
-                  'Your $campaignName brand request $orderRef has been cancelled $cancellationReason',
-              type: 'brand_request_cancelled_by_timeout',
+                  'Your $campaignName brand request $orderRef has expired $expirationReason',
+              type: 'brand_request_expired',
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: <String, dynamic>{'reason': cancellationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
@@ -1652,26 +1755,26 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
           if (clientEmail.isNotEmpty) {
             await NotificationsService.createUserNotification(
               receiverEmail: clientEmail,
-              title: 'Brand Request Cancelled',
+              title: 'Brand Request Expired',
               body:
-                  'Your $brandCompany $campaignName brand request $orderRef has been cancelled $cancellationReason',
-              type: 'client_brand_request_cancelled_by_timeout',
+                  'Your $brandCompany $campaignName brand request $orderRef has expired $expirationReason',
+              type: 'client_brand_request_expired',
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: <String, dynamic>{'reason': cancellationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
           await NotificationsService.notifyAdmins(
-            title: 'Brand Request Cancelled',
+            title: 'Brand Request Expired',
             body:
-                '$brandCompany $campaignName brand request $orderRef has been cancelled $cancellationReason',
-            type: 'admin_brand_request_cancelled_by_timeout',
+                '$brandCompany $campaignName brand request $orderRef has expired $expirationReason',
+            type: 'admin_brand_request_expired',
             orderId: req.id,
             orderNumber: req.orderNumber,
             sourceCollection: collection,
-            extra: <String, dynamic>{'reason': cancellationReason},
+            extra: <String, dynamic>{'reason': expirationReason},
           );
         }
       } catch (_) {}
@@ -2230,7 +2333,11 @@ class _ClientOrdersPageState extends State<ClientOrdersPage> {
               ),
 
         body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+          padding: responsivePagePadding(
+            context,
+            phone: const EdgeInsets.fromLTRB(16, 8, 16, 22),
+            maxContentWidth: 900,
+          ),
           children: [
             _FilterTabs(
               selected: _filter,
@@ -3513,7 +3620,7 @@ class _NfcChip extends StatelessWidget {
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           color: AppColors.blackCat,
           fontSize: 10,

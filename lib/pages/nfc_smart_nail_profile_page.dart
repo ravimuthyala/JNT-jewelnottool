@@ -306,7 +306,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save NFC profile: $e')));
+      ).showSnackBar(SnackBar(content: Text('Failed to save JNT Tap profile: $e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -323,7 +323,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'NFC nail profile',
+      label: 'JNT Tap nail profile',
       child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: AppBar(
@@ -332,7 +332,7 @@ class _NfcSmartNailProfilePageState extends State<NfcSmartNailProfilePage> {
           elevation: 0,
           centerTitle: true,
           title: const Text(
-            'NFC SMART NAIL',
+            'JNT TAP SMART NAIL',
             style: TextStyle(
               color: AppColors.blackCat,
               fontWeight: FontWeight.w700,
@@ -971,7 +971,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'NFC saved items',
+      label: 'JNT Tap saved items',
       child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: AppBar(
@@ -980,7 +980,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
           elevation: 0,
           centerTitle: true,
           title: const Text(
-            'ACTIVATE NFC NAIL',
+            'ACTIVATE JNT TAP NAIL',
             style: TextStyle(
               color: AppColors.blackCat,
               fontWeight: FontWeight.w700,
@@ -1000,7 +1000,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
                 child: Padding(
                   padding: EdgeInsets.all(24),
                   child: Text(
-                    'No saved NFC items found. Go back and enter at least one field before activation.',
+                    'No saved JNT Tap items found. Go back and enter at least one field before activation.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: AppColors.blackCat,
@@ -1056,7 +1056,7 @@ class _NfcSavedItemsPageState extends State<NfcSavedItemsPage> {
                             _activating
                                 ? 'Opening Scanner...'
                                 : (_chips.isEmpty
-                                      ? 'Activate NFC Nail'
+                                      ? 'Activate JNT Tap Nail'
                                       : 'Activate Another Chip'),
                           ),
                           style: ElevatedButton.styleFrom(
@@ -1118,14 +1118,14 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
     if (!isAvailable) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('NFC is not available on this device.')),
+        const SnackBar(content: Text('JNT Tap is not available on this device.')),
       );
       return;
     }
 
     setState(() {
       _isScanning = true;
-      _statusMessage = 'Hold your NFC nail near your phone.';
+      _statusMessage = 'Hold your JNT Tap nail near your phone.';
     });
 
     // Create the chip row up front so its id can be embedded in the stable
@@ -1157,19 +1157,19 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
         NfcPollingOption.iso14443,
         NfcPollingOption.iso15693,
       },
-      alertMessage: 'Hold your NFC nail near the top of your phone.',
+      alertMessage: 'Hold your JNT Tap nail near the top of your phone.',
       onDiscovered: (NfcTag tag) async {
         try {
           final ndef = Ndef.from(tag);
           if (ndef == null) {
             await NfcManager.instance.stopSession(
-              errorMessage: 'This NFC tag does not support NDEF.',
+              errorMessage: 'This JNT Tap tag does not support NDEF.',
             );
             await _deleteChipRow(createdChip.id);
             if (mounted) {
               setState(() {
                 _isScanning = false;
-                _statusMessage = 'This NFC tag does not support NDEF.';
+                _statusMessage = 'This JNT Tap tag does not support NDEF.';
               });
             }
             return;
@@ -1177,13 +1177,13 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
 
           if (!ndef.isWritable) {
             await NfcManager.instance.stopSession(
-              errorMessage: 'This NFC tag is not writable.',
+              errorMessage: 'This JNT Tap tag is not writable.',
             );
             await _deleteChipRow(createdChip.id);
             if (mounted) {
               setState(() {
                 _isScanning = false;
-                _statusMessage = 'This NFC tag is not writable.';
+                _statusMessage = 'This JNT Tap tag is not writable.';
               });
             }
             return;
@@ -1198,7 +1198,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           await ndef.write(message);
 
           await NfcManager.instance.stopSession(
-            alertMessage: 'NFC nail activated successfully.',
+            alertMessage: 'JNT Tap nail activated successfully.',
           );
 
           if (!mounted) return;
@@ -1217,7 +1217,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           );
         } catch (e) {
           await NfcManager.instance.stopSession(
-            errorMessage: 'Failed to activate NFC nail.',
+            errorMessage: 'Failed to activate JNT Tap nail.',
           );
           try {
             await _deleteChipRow(createdChip.id);
@@ -1225,7 +1225,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           if (!mounted) return;
           setState(() {
             _isScanning = false;
-            _statusMessage = 'Failed to activate NFC nail: $e';
+            _statusMessage = 'Failed to activate JNT Tap nail: $e';
           });
         }
       },
@@ -1237,14 +1237,14 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
     final statusText =
         _statusMessage ??
         (_isScanning
-            ? 'Keep your NFC nail near your phone.'
-            : 'Hold your NFC nail near the top of your phone to activate it.');
+            ? 'Keep your JNT Tap nail near your phone.'
+            : 'Hold your JNT Tap nail near the top of your phone to activate it.');
 
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
       namesRoute: true,
-      label: 'NFC scan activation',
+      label: 'JNT Tap scan activation',
       child: Scaffold(
         backgroundColor: AppColors.snow,
         appBar: AppBar(
@@ -1253,7 +1253,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
           elevation: 0,
           centerTitle: true,
           title: const Text(
-            'SCAN NFC NAIL',
+            'SCAN JNT TAP NAIL',
             style: TextStyle(
               color: AppColors.blackCat,
               fontWeight: FontWeight.w700,
@@ -1350,7 +1350,7 @@ class _NfcScanActivationPageState extends State<NfcScanActivationPage> {
                   label: Text(
                     _isActivated
                         ? 'Done'
-                        : (_isScanning ? 'Scanning...' : 'Start NFC Scan'),
+                        : (_isScanning ? 'Scanning...' : 'Start JNT Tap Scan'),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.blackCat,
@@ -1446,7 +1446,7 @@ class _ActivationIntroCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   selectedItem == null
-                      ? 'Only one option can be activated per NFC chip.'
+                      ? 'Only one option can be activated per JNT Tap chip.'
                       : '${selectedItem!.title} is selected for activation.',
                   style: TextStyle(
                     color: AppColors.blackCat.withValues(alpha: 0.72),
@@ -1493,7 +1493,7 @@ class _MyChipTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final label = chip.label?.trim().isNotEmpty == true
         ? chip.label!.trim()
-        : 'NFC Chip';
+        : 'JNT Tap Chip';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),

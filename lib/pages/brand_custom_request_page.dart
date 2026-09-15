@@ -21,6 +21,7 @@ import '../services/address_validation_service.dart';
 import '../services/artist_directory_service.dart';
 import '../services/notifications_service.dart';
 import '../utils/scenario_4_1.dart';
+import '../utlis/responsive_layout.dart';
 
 const Color _requestSnow = Color(0xFFFAF9F9);
 final BorderSide _requestBorder = BorderSide(
@@ -1076,7 +1077,15 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       _showSnackAndAnnounce('You can upload up to 10 inspiration photos.');
       return;
     }
-    final picked = await _picker.pickMultiImage(imageQuality: 85);
+    // Deliberately NOT passing imageQuality here. image_picker's native
+    // multi-select compression path has a known bug (Android especially)
+    // where every selected image gets compressed to the SAME temp
+    // filename, so every returned XFile ends up pointing at the
+    // last-written file. Compression now happens per-file below via the
+    // existing _bytesForUpload helper instead, which also fixes the fact
+    // that reference images previously had no size limit or compression
+    // at all -- raw full-resolution photos were stored/uploaded as-is.
+    final picked = await _picker.pickMultiImage();
     // The OS image picker steals accessibility focus; after it returns, put
     // focus back on the Gallery button (not wherever the platform lands it)
     // so screen reader users stay in place.
@@ -1090,7 +1099,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
     final uploaded = await Future.wait(
       pickedToAdd.map((x) async {
         final bytes = await x.readAsBytes();
-        return _UploadedReferenceImage(name: x.name, bytes: bytes);
+        return _UploadedReferenceImage(name: x.name, bytes: _bytesForUpload(bytes));
       }),
     );
 
@@ -4852,6 +4861,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final baseTheme = Theme.of(context);
     final pageTheme = baseTheme.copyWith(
       scaffoldBackgroundColor: AppColors.alabaster,
@@ -4902,9 +4912,19 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                         widget.onBackHome ?? () => Navigator.pop(context),
                   ),
                 ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-            children: [
+          body: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isTablet ? 1200 : double.infinity,
+              ),
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  isTablet ? 24 : 16,
+                  10,
+                  isTablet ? 24 : 16,
+                  20,
+                ),
+                children: [
               const SizedBox(height: 2),
               Center(
                 child: _a11yHeading(
@@ -5568,7 +5588,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                             _SearchableSelectField(
                               sortKey: OrdinalSortKey(2),
                               value: _requestedArtist ?? '',
-                              hint: 'Select Artist',
+                              hint: 'Select One',
                               semanticLabel: 'Artist',
                               pickerTitle: 'Select Artist',
                               searchLabel: 'Search artists',
@@ -6004,7 +6024,9 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
                   ),
                 ),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
           bottomNavigationBar: widget.showBottomNav
               ? CompanyBottomNav(

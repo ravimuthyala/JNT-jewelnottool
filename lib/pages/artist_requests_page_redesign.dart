@@ -33,6 +33,7 @@ import '../widgets/client_profile_avatar_icon.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/company_client_request_card.dart';
 import '../widgets/request_modal_accessibility.dart';
+import '../utlis/responsive_layout.dart';
 
 // Supabase database compatibility helpers for this page.
 // These keep the existing UI and business-flow code intact while routing reads/writes to Supabase tables.
@@ -788,6 +789,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   bool _initialLoadScheduled = false;
   bool _realtimeBound = false;
   final List<ClientRequestV2> _all = [];
+  // Bumped on every mutation of `_all` so the filter/count memoization below
+  // knows to recompute; `_all` is a `final` list mutated in place, so its
+  // own identity never changes and can't be used as a change signal.
+  int _allVersion = 0;
   final Set<String> _locallyDeclinedRequestIds = <String>{};
   final Set<String> _persistedArtistDeclinedRequestIds = <String>{};
   String _currentArtistNameLower = '';
@@ -812,8 +817,37 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     );
   }
 
+  // `_applySharedFilters` (search text + direct/group toggles + budget
+  // range) was previously re-run over the full `_all` list separately by
+  // every tab count and by `_filteredForTab` -- up to 6 full scans per
+  // rebuild, including on every search keystroke. Caching the shared-filter
+  // pass here and invalidating only when an actual input changes (tracked
+  // via `_allVersion` plus the filter values themselves) collapses that
+  // back down to one scan per rebuild.
+  Object? _sharedFilteredSignature;
+  List<ClientRequestV2>? _sharedFilteredCache;
+
+  List<ClientRequestV2> _sharedFiltered() {
+    final signature = Object.hash(
+      _allVersion,
+      _searchCtrl.text.trim().toLowerCase(),
+      _directOnly,
+      _groupOnly,
+      _budgetRange.start,
+      _budgetRange.end,
+    );
+    final cached = _sharedFilteredCache;
+    if (cached != null && _sharedFilteredSignature == signature) {
+      return cached;
+    }
+    final result = _all.where(_applySharedFilters).toList(growable: false);
+    _sharedFilteredSignature = signature;
+    _sharedFilteredCache = result;
+    return result;
+  }
+
   int _countForAllActive() {
-    return _all
+    return _sharedFiltered()
         .where(
           (r) =>
               r.status != RequestStatusV2.delivered &&
@@ -821,25 +855,20 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               r.status != RequestStatusV2.expired &&
               r.status != RequestStatusV2.cancelled,
         )
-        .where(_applySharedFilters)
         .length;
   }
 
   int _countForStatus(RequestStatusV2 status) {
-    return _all
-        .where((r) => r.status == status)
-        .where(_applySharedFilters)
-        .length;
+    return _sharedFiltered().where((r) => r.status == status).length;
   }
 
   int _countForDesigningTab() {
-    return _all
+    return _sharedFiltered()
         .where(
           (r) =>
               r.status == RequestStatusV2.designing ||
               r.status == RequestStatusV2.accepted,
         )
-        .where(_applySharedFilters)
         .length;
   }
 
@@ -1622,23 +1651,39 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       if (requestNumber.isNotEmpty) byOrderNumber[requestNumber] = status;
     }
 
-    Future<void> scan(String table) async {
+    // Only the ids already in `requests` can ever be overridden below, so
+    // look those up directly instead of scanning the 500 most-recently
+    // updated rows platform-wide on every load.
+    Future<void> scan(String table, List<String> ids) async {
+      if (ids.isEmpty) return;
       try {
         final rows = await Supabase.instance.client
             .from(table)
             .select(
               'id,order_number,request_number,status,artist_status,updated_at',
             )
-            .order('updated_at', ascending: false)
-            .limit(500);
+            .inFilter('id', ids);
         for (final raw in rows.whereType<Map>()) {
           addRow(Map<String, dynamic>.from(raw));
         }
       } catch (_) {}
     }
 
-    await scan('client_custom_requests');
-    await scan('company_custom_requests');
+    final clientIds = requests
+        .where((r) => r.sourceCollection != 'Company_Custom_Requests')
+        .map((r) => r.id)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final companyIds = requests
+        .where((r) => r.sourceCollection == 'Company_Custom_Requests')
+        .map((r) => r.id)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    await scan('client_custom_requests', clientIds);
+    await scan('company_custom_requests', companyIds);
 
     return requests
         .map((request) {
@@ -1653,20 +1698,25 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   Future<Set<String>> _fetchPersistedArtistDeclinedRequestIds(
     String artistEmail,
+    List<ClientRequestV2> requests,
   ) async {
     final email = artistEmail.trim().toLowerCase();
     if (email.isEmpty) return <String>{};
     final ids = <String>{};
 
-    Future<void> scanTable(String table) async {
+    // `_all` is built solely by filtering `requests` below, so a declined id
+    // outside that list can never matter -- look up only those ids instead
+    // of scanning the 1000 most-recently-updated rows platform-wide (with a
+    // second full 1000-row scan as a fallback) on every load.
+    Future<void> scanTable(String table, List<String> requestIds) async {
+      if (requestIds.isEmpty) return;
       try {
         final rows = await Supabase.instance.client
             .from(table)
             .select(
               'id,status,artist_status,direct_artist_status,artist_pool_status,accepted_by_artist_email,selected_artist_email,declined_by_artist_email,declined_by_artist_emails,data,updated_at',
             )
-            .order('updated_at', ascending: false)
-            .limit(1000);
+            .inFilter('id', requestIds);
         for (final raw in rows.whereType<Map>()) {
           final row = Map<String, dynamic>.from(raw);
           final id = (row['id'] ?? '').toString().trim();
@@ -1680,8 +1730,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               .select(
                 'id,status,artist_status,accepted_by_artist_email,selected_artist_email,data,updated_at',
               )
-              .order('updated_at', ascending: false)
-              .limit(1000);
+              .inFilter('id', requestIds);
           for (final raw in rows.whereType<Map>()) {
             final row = Map<String, dynamic>.from(raw);
             final id = (row['id'] ?? '').toString().trim();
@@ -1692,8 +1741,21 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       }
     }
 
-    await scanTable('client_custom_requests');
-    await scanTable('company_custom_requests');
+    final clientIds = requests
+        .where((r) => r.sourceCollection != 'Company_Custom_Requests')
+        .map((r) => r.id)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final companyIds = requests
+        .where((r) => r.sourceCollection == 'Company_Custom_Requests')
+        .map((r) => r.id)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    await scanTable('client_custom_requests', clientIds);
+    await scanTable('company_custom_requests', companyIds);
     return ids;
   }
 
@@ -1723,8 +1785,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           (Supabase.instance.client.auth.currentUser?.email ?? '')
               .trim()
               .toLowerCase();
-      final persistedDeclinedIds =
-          await _fetchPersistedArtistDeclinedRequestIds(currentArtistEmail);
+      final persistedDeclinedIds = await _fetchPersistedArtistDeclinedRequestIds(
+        currentArtistEmail,
+        hydratedRequests,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -1772,6 +1836,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               );
             }),
           );
+        _allVersion++;
         _isLoadingDb = false;
         _hasLoadedRequests = true;
       });
@@ -1818,6 +1883,15 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final updated = <ClientRequestV2>[];
 
     for (final request in requests) {
+      // Before any client has accepted a brand request, the earlier
+      // accept-by date is the deadline; once a client has, the request
+      // gets the full runway to the need-by date for an artist to accept.
+      final hasAnyClientAcceptance =
+          request.acceptedByClientEmail.trim().isNotEmpty ||
+          request.acceptedGroupClientEmails.isNotEmpty;
+      final deadline = hasAnyClientAcceptance
+          ? request.neededBy
+          : (request.requestAcceptBy ?? request.neededBy);
       final shouldExpire =
           request.sourceCollection == 'Company_Custom_Requests' &&
           request.acceptedByArtistEmail.trim().isEmpty &&
@@ -1828,9 +1902,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           request.status != RequestStatusV2.shipped &&
           now.isAfter(
             DateTime(
-              request.neededBy.year,
-              request.neededBy.month,
-              request.neededBy.day,
+              deadline.year,
+              deadline.month,
+              deadline.day,
             ).add(const Duration(days: 1)),
           );
 
@@ -2106,7 +2180,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       return false;
     }
 
-    final list = _all.where(isActiveTab).where(_applySharedFilters).toList();
+    final list = _sharedFiltered().where(isActiveTab).toList();
 
     // Sort
     if (_sort == 'Newest') {
@@ -2327,6 +2401,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -2342,11 +2417,21 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           trailing: _avatarMenu(),
         ),
 
-        body: Column(
-          children: [
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 1200 : double.infinity,
+            ),
+            child: Column(
+              children: [
             // Top controls area
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                8,
+                isTablet ? 24 : 16,
+                10,
+              ),
               child: Column(
                 children: [
                   if (!widget.showOnlyCompanyRequests)
@@ -2373,7 +2458,9 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   children: List.generate(5, (i) => _tabList(i)),
                 ),
               ),
-          ],
+              ],
+            ),
+          ),
         ),
         bottomNavigationBar: widget.showBottomNav
             ? BottomNavigationBar(
@@ -3104,7 +3191,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   void _replaceById(String id, ClientRequestV2 updated) {
     final i = _all.indexWhere((e) => e.id == id);
     if (i == -1) return;
-    setState(() => _all[i] = updated);
+    setState(() {
+      _all[i] = updated;
+      _allVersion++;
+    });
   }
 
   Future<ClientRequestV2> _hydrateRequestForDetails(
@@ -3594,6 +3684,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   void _removeRequestLocally(String id) {
     setState(() {
       _all.removeWhere((r) => r.id == id);
+      _allVersion++;
     });
   }
 
@@ -3685,6 +3776,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               'status': 'delivered',
               'client_status': 'delivered',
               'artist_status': 'delivered',
+              'shipping_status': 'delivered',
               'delivered_at': now,
               'order_delivered_at': now,
               'updated_at': now,
@@ -3738,6 +3830,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               'brand_status': 'delivered',
               'client_status': 'delivered',
               'artist_status': 'delivered',
+              'shipping_status': 'delivered',
               'updated_at': now,
               'payload': <String, dynamic>{
                 ...payload,
@@ -3994,6 +4087,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         _locallyDeclinedRequestIds.add(request.id);
         _persistedArtistDeclinedRequestIds.add(request.id);
         _all.removeWhere((item) => item.id == request.id);
+        _allVersion++;
       });
     } else {
       _locallyDeclinedRequestIds.add(request.id);
@@ -4009,6 +4103,49 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final existingMap = existingRoot == null
         ? <String, dynamic>{}
         : Map<String, dynamic>.from(existingRoot as Map);
+
+    // Re-check against this fresh fetch (not the possibly-stale in-memory
+    // `request` the card was built from) before writing anything -- closes
+    // the race where an artist accepted, or the request was otherwise
+    // closed out, between this card loading and the artist tapping Decline.
+    final existingStatusRaw = (existingMap['status'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final existingAcceptedByArtistEmail = (existingMap['accepted_by_artist_email'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    const nonDeclinableStatuses = <String>{
+      'declined',
+      'cancelled',
+      'canceled',
+      'expired',
+    };
+    if (existingRoot == null ||
+        existingAcceptedByArtistEmail.isNotEmpty ||
+        nonDeclinableStatuses.contains(existingStatusRaw)) {
+      if (mounted) {
+        setState(() {
+          _locallyDeclinedRequestIds.remove(request.id);
+          _persistedArtistDeclinedRequestIds.remove(request.id);
+          if (!_all.any((item) => item.id == request.id)) {
+            _all.add(request);
+          }
+          _allVersion++;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This request is no longer available to decline -- it may '
+              'already have been accepted, cancelled, or expired.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     final existingData = existingMap['data'] is Map
         ? Map<String, dynamic>.from(existingMap['data'] as Map)
         : <String, dynamic>{};
@@ -4055,6 +4192,23 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final shouldReleaseClientDirectToPool =
         releaseDirectClientRequestToArtistPool;
+    // Brand direct requests with fallback allowed were previously only
+    // ever notified as "released to pool" (see releaseDirectBrandRequestToPool
+    // below) without the status writes actually reopening them -- the
+    // request stayed stuck at 'declined' forever. Folding it into the same
+    // reopen branch as the client case fixes that; company_custom_requests
+    // has the same open_to_artist_pool/selected_artist/is_direct_request/
+    // request_type columns as client_custom_requests, so the same field set
+    // is safe to write to either table.
+    final shouldReleaseToPool =
+        shouldReleaseClientDirectToPool || releaseDirectBrandRequestToPool;
+    // A plain pool (non-direct) request is a single row visible to every
+    // candidate artist. Writing status/artist_status/etc as 'declined' here
+    // would close the request out for the client and every OTHER artist
+    // still considering it, not just this one -- so for this case, don't
+    // touch any of the shared status fields at all, only this artist's own
+    // decline-tracking fields (declined_by_artist_email(s) etc below).
+    final isPlainPoolDecline = !request.isDirectRequest;
 
     final existingDeclined = <String>{
       if (existingMap['declined_by_artist_emails'] is List)
@@ -4070,22 +4224,26 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final updatedData = <String, dynamic>{
       ...existingData,
-      'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-      'clientStatus': 'pending',
-      'artistStatus': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-      'directArtistStatus': 'declined',
-      'artistPoolStatus': shouldReleaseClientDirectToPool
-          ? 'in_review'
-          : 'declined',
-      if (shouldReleaseClientDirectToPool) 'openToArtistPool': true,
-      if (shouldReleaseClientDirectToPool) 'isDirectRequest': false,
-      if (shouldReleaseClientDirectToPool) 'requestType': 'Standard',
-      if (shouldReleaseClientDirectToPool) 'selectedArtist': '',
-      if (shouldReleaseClientDirectToPool) 'selectedArtistEmail': '',
-      if (shouldReleaseClientDirectToPool) 'acceptedByArtistEmail': '',
-      if (shouldReleaseClientDirectToPool)
+      if (!isPlainPoolDecline) ...{
+        'status': shouldReleaseToPool ? 'pending' : 'declined',
+        'clientStatus': 'pending',
+        'artistStatus': shouldReleaseToPool ? 'pending' : 'declined',
+        'directArtistStatus': 'declined',
+        'artistPoolStatus': shouldReleaseToPool ? 'in_review' : 'declined',
+        'roleStatuses': <String, dynamic>{
+          'client': 'pending',
+          'artist': 'declined',
+        },
+      },
+      if (shouldReleaseToPool) 'openToArtistPool': true,
+      if (shouldReleaseToPool) 'isDirectRequest': false,
+      if (shouldReleaseToPool) 'requestType': 'Standard',
+      if (shouldReleaseToPool) 'selectedArtist': '',
+      if (shouldReleaseToPool) 'selectedArtistEmail': '',
+      if (shouldReleaseToPool) 'acceptedByArtistEmail': '',
+      if (shouldReleaseToPool)
         'declinedArtistName': originallySelectedArtistName,
-      if (shouldReleaseClientDirectToPool)
+      if (shouldReleaseToPool)
         'declinedArtistEmail': originallySelectedArtistEmail,
       'declinedByArtistEmails': existingDeclined,
       'declinedByArtistEmail': artistEmail,
@@ -4093,10 +4251,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       'completionDeclinedAt': declinedAtIso,
       'completionDeclineReason': artistCancelReason,
       'completionDeclineDescription': artistCancelReason,
-      'roleStatuses': <String, dynamic>{
-        'client': 'pending',
-        'artist': 'declined',
-      },
       'artistDecline': <String, dynamic>{
         'artistEmail': artistEmail,
         'artistName': originallySelectedArtistName,
@@ -4108,19 +4262,21 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
 
     final updatedDetailsOrder = <String, dynamic>{
       ...existingDetailsOrder,
-      'directArtistStatus': 'declined',
-      'artistPoolStatus': shouldReleaseClientDirectToPool ? 'open' : 'declined',
-      if (shouldReleaseClientDirectToPool) 'openToArtistPool': true,
-      if (shouldReleaseClientDirectToPool) 'isDirectRequest': false,
-      if (shouldReleaseClientDirectToPool)
+      if (!isPlainPoolDecline) ...{
+        'directArtistStatus': 'declined',
+        'artistPoolStatus': shouldReleaseToPool ? 'open' : 'declined',
+      },
+      if (shouldReleaseToPool) 'openToArtistPool': true,
+      if (shouldReleaseToPool) 'isDirectRequest': false,
+      if (shouldReleaseToPool)
         'declinedArtist': originallySelectedArtistName,
-      if (shouldReleaseClientDirectToPool)
+      if (shouldReleaseToPool)
         'declinedArtistEmail': originallySelectedArtistEmail,
     };
     final updatedDetailsRouting = existingDetails['routing'] is Map
         ? Map<String, dynamic>.from(existingDetails['routing'] as Map)
         : <String, dynamic>{};
-    if (shouldReleaseClientDirectToPool) {
+    if (shouldReleaseToPool) {
       updatedDetailsRouting['openToArtistPool'] = true;
       updatedDetailsRouting['artistPoolStatus'] = 'open';
       updatedDetailsRouting['directArtistStatus'] = 'declined';
@@ -4128,11 +4284,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     final updatedDetails = <String, dynamic>{
       ...existingDetails,
       'order': updatedDetailsOrder,
-      if (shouldReleaseClientDirectToPool) 'routing': updatedDetailsRouting,
-      if (shouldReleaseClientDirectToPool) 'requestType': 'Standard',
-      if (shouldReleaseClientDirectToPool)
+      if (shouldReleaseToPool) 'routing': updatedDetailsRouting,
+      if (shouldReleaseToPool) 'requestType': 'Standard',
+      if (shouldReleaseToPool)
         'declinedArtistName': originallySelectedArtistName,
-      if (shouldReleaseClientDirectToPool)
+      if (shouldReleaseToPool)
         'declinedArtistEmail': originallySelectedArtistEmail,
     };
 
@@ -4153,24 +4309,24 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       await Supabase.instance.client
           .from(table)
           .update(<String, dynamic>{
-            'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-            'client_status': 'pending',
-            'artist_status': shouldReleaseClientDirectToPool
-                ? 'pending'
-                : 'declined',
-            'direct_artist_status': 'declined',
-            'artist_pool_status': shouldReleaseClientDirectToPool
-                ? 'in_review'
-                : 'declined',
-            if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
-            if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
-            if (shouldReleaseClientDirectToPool) 'selected_artist': '',
-            if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
-            if (shouldReleaseClientDirectToPool) 'accepted_by_artist_email': '',
-            if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
-            if (shouldReleaseClientDirectToPool)
+            if (!isPlainPoolDecline) ...{
+              'status': shouldReleaseToPool ? 'pending' : 'declined',
+              'client_status': 'pending',
+              'artist_status': shouldReleaseToPool ? 'pending' : 'declined',
+              'direct_artist_status': 'declined',
+              'artist_pool_status': shouldReleaseToPool
+                  ? 'in_review'
+                  : 'declined',
+            },
+            if (shouldReleaseToPool) 'request_type': 'Standard',
+            if (shouldReleaseToPool) 'open_to_artist_pool': true,
+            if (shouldReleaseToPool) 'selected_artist': '',
+            if (shouldReleaseToPool) 'selected_artist_email': '',
+            if (shouldReleaseToPool) 'accepted_by_artist_email': '',
+            if (shouldReleaseToPool) 'is_direct_request': false,
+            if (shouldReleaseToPool)
               'declined_artist_name': originallySelectedArtistName,
-            if (shouldReleaseClientDirectToPool)
+            if (shouldReleaseToPool)
               'declined_artist_email': originallySelectedArtistEmail,
             'declined_by_artist_emails': existingDeclined,
             'declined_by_artist_email': artistEmail,
@@ -4187,19 +4343,19 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       await Supabase.instance.client
           .from(table)
           .update(<String, dynamic>{
-            'status': shouldReleaseClientDirectToPool ? 'pending' : 'declined',
-            'artist_status': shouldReleaseClientDirectToPool
-                ? 'pending'
-                : 'declined',
-            if (shouldReleaseClientDirectToPool) 'request_type': 'Standard',
-            if (shouldReleaseClientDirectToPool) 'open_to_artist_pool': true,
-            if (shouldReleaseClientDirectToPool) 'selected_artist': '',
-            if (shouldReleaseClientDirectToPool) 'selected_artist_email': '',
-            if (shouldReleaseClientDirectToPool) 'accepted_by_artist_email': '',
-            if (shouldReleaseClientDirectToPool) 'is_direct_request': false,
-            if (shouldReleaseClientDirectToPool)
+            if (!isPlainPoolDecline) ...{
+              'status': shouldReleaseToPool ? 'pending' : 'declined',
+              'artist_status': shouldReleaseToPool ? 'pending' : 'declined',
+            },
+            if (shouldReleaseToPool) 'request_type': 'Standard',
+            if (shouldReleaseToPool) 'open_to_artist_pool': true,
+            if (shouldReleaseToPool) 'selected_artist': '',
+            if (shouldReleaseToPool) 'selected_artist_email': '',
+            if (shouldReleaseToPool) 'accepted_by_artist_email': '',
+            if (shouldReleaseToPool) 'is_direct_request': false,
+            if (shouldReleaseToPool)
               'declined_artist_name': originallySelectedArtistName,
-            if (shouldReleaseClientDirectToPool)
+            if (shouldReleaseToPool)
               'declined_artist_email': originallySelectedArtistEmail,
             'updated_at': declinedAtIso,
             'data': updatedData,
@@ -5513,6 +5669,84 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                   .trim()
                   .toLowerCase();
           brandEmails.remove(acceptedClientEmail);
+          final brandCompanyName = (brandCtx['brandName'] ?? '').trim().isNotEmpty
+              ? brandCtx['brandName']!
+              : (r.brandName.trim().isEmpty ? 'Brand' : r.brandName.trim());
+
+          // Working deep link: matches main.dart's `path.contains('review-order')`
+          // handler, which hydrates the order by id and opens
+          // DeliveredOrderDetailsPage directly on the Review & Tip panel.
+          // artistId is the signed-in artist's own auth uid, which doubles
+          // as their row id in the artist/client_artist tables everywhere
+          // else in this app. Used for brand-order recipients too -- the
+          // client who actually received the nails still rates/tips the
+          // artist regardless of whether the order came through a campaign.
+          final deliveredArtistId =
+              Supabase.instance.client.auth.currentUser?.id ?? '';
+          final reviewUrl =
+              'https://jnt-app-c3097.web.app/review-order?orderId=${Uri.encodeComponent(r.id)}&artistId=${Uri.encodeComponent(deliveredArtistId)}';
+          // The brand contact itself doesn't rate/tip, so its copy links to
+          // the order/campaign view instead -- matches the appLink used by
+          // ShippedEmailTemplates.brand.
+          final appLink =
+              'https://jnt-app-c3097.web.app/open-app?type=order-details&orderId=${Uri.encodeComponent(r.id)}';
+          final deliveredOnText =
+              '${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().year}';
+
+          String firstNameOf(String full) {
+            final trimmed = full.trim();
+            if (trimmed.isEmpty) return 'there';
+            return trimmed.split(RegExp(r'\s+')).first;
+          }
+
+          final effectiveArtistName = artistEmail.isNotEmpty
+              ? artistEmail.split('@').first
+              : 'Your artist';
+
+          // "All group clients" -- same union-of-sources pattern used for
+          // shipped-order emails. Shared by both the brand and non-brand
+          // branches below.
+          final groupRecipients = <String, String>{};
+          for (final gc in hydrated.groupClients) {
+            final email = gc.clientEmail.trim().toLowerCase();
+            if (email.isEmpty) continue;
+            groupRecipients[email] = gc.clientName.trim();
+          }
+          for (final email in <String>[
+            ...hydrated.selectedGroupClientEmails,
+            ...hydrated.acceptedGroupClientEmails,
+          ]) {
+            final normalized = email.trim().toLowerCase();
+            if (normalized.isEmpty) continue;
+            groupRecipients.putIfAbsent(normalized, () => '');
+          }
+          groupRecipients.remove(clientEmail);
+          groupRecipients.remove(acceptedClientEmail);
+
+          Future<void> sendGroupClientEmails({
+            required String primaryClientNameForCopy,
+          }) async {
+            for (final entry in groupRecipients.entries) {
+              final groupContent = DeliveredEmailTemplates.client(
+                isGroupClient: true,
+                recipientFirstName: firstNameOf(entry.value),
+                primaryClientName: primaryClientNameForCopy,
+                orderNumber: orderRef,
+                deliveredDate: deliveredOnText,
+                artistName: effectiveArtistName,
+                reviewUrl: reviewUrl,
+                appLink: reviewUrl,
+              );
+              await NotificationsService.queueEmail(
+                to: entry.key,
+                subject: groupContent.subject,
+                text: groupContent.text,
+                html: groupContent.html,
+                preheader: groupContent.preheader,
+              );
+            }
+          }
+
           if (isBrandRequest) {
             for (final receiver in brandEmails) {
               await NotificationsService.createUserNotification(
@@ -5524,6 +5758,22 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 orderId: r.id,
                 orderNumber: r.orderNumber,
                 sourceCollection: r.sourceCollection,
+              );
+              final brandContent = DeliveredEmailTemplates.brand(
+                campaignName: campaignName,
+                brandCompanyName: brandCompanyName,
+                primaryClientName: acceptedClientName,
+                orderNumber: orderRef,
+                deliveredDate: deliveredOnText,
+                artistName: effectiveArtistName,
+                appLink: appLink,
+              );
+              await NotificationsService.queueEmail(
+                to: receiver,
+                subject: brandContent.subject,
+                text: brandContent.text,
+                html: brandContent.html,
+                preheader: brandContent.preheader,
               );
             }
             if (artistEmail.isNotEmpty) {
@@ -5549,6 +5799,46 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 orderNumber: r.orderNumber,
                 sourceCollection: r.sourceCollection,
               );
+              final acceptedClientContent = DeliveredEmailTemplates.client(
+                isGroupClient: false,
+                recipientFirstName: firstNameOf(acceptedClientName),
+                primaryClientName: acceptedClientName,
+                orderNumber: orderRef,
+                deliveredDate: deliveredOnText,
+                artistName: effectiveArtistName,
+                reviewUrl: reviewUrl,
+                appLink: reviewUrl,
+              );
+              await NotificationsService.queueEmail(
+                to: acceptedClientEmail,
+                subject: acceptedClientContent.subject,
+                text: acceptedClientContent.text,
+                html: acceptedClientContent.html,
+                preheader: acceptedClientContent.preheader,
+              );
+            }
+            await sendGroupClientEmails(
+              primaryClientNameForCopy: acceptedClientName,
+            );
+            if (artistEmail.isNotEmpty) {
+              final artistContent = DeliveredEmailTemplates.artist(
+                isBrandOrder: true,
+                orderNumber: orderRef,
+                deliveredDate: deliveredOnText,
+                artistName: effectiveArtistName,
+                primaryClientName: acceptedClientName,
+                groupClientCount: groupRecipients.length,
+                appLink: appLink,
+                campaignName: campaignName,
+                brandCompanyName: brandCompanyName,
+              );
+              await NotificationsService.queueEmail(
+                to: artistEmail,
+                subject: artistContent.subject,
+                text: artistContent.text,
+                html: artistContent.html,
+                preheader: artistContent.preheader,
+              );
             }
             await NotificationsService.notifyArtistPoolBrandDelivered(
               clientName: acceptedClientName,
@@ -5571,25 +5861,6 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
             );
             return;
           }
-          // Working deep link: matches main.dart's `path.contains('review-order')`
-          // handler, which hydrates the order by id and opens
-          // DeliveredOrderDetailsPage directly on the Review & Tip panel.
-          // artistId is the signed-in artist's own auth uid, which doubles
-          // as their row id in the artist/client_artist tables everywhere
-          // else in this app.
-          final deliveredArtistId =
-              Supabase.instance.client.auth.currentUser?.id ?? '';
-          final reviewUrl =
-              'https://jnt-app-c3097.web.app/review-order?orderId=${Uri.encodeComponent(r.id)}&artistId=${Uri.encodeComponent(deliveredArtistId)}';
-          final deliveredOnText =
-              '${DateTime.now().month.toString().padLeft(2, '0')}/${DateTime.now().day.toString().padLeft(2, '0')}/${DateTime.now().year}';
-
-          String firstNameOf(String full) {
-            final trimmed = full.trim();
-            if (trimmed.isEmpty) return 'there';
-            return trimmed.split(RegExp(r'\s+')).first;
-          }
-
           if (clientEmail.isNotEmpty) {
             await NotificationsService.createUserNotification(
               receiverEmail: clientEmail,
@@ -5611,9 +5882,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               primaryClientName: r.clientName,
               orderNumber: orderRef,
               deliveredDate: deliveredOnText,
-              artistName: artistEmail.isNotEmpty
-                  ? artistEmail.split('@').first
-                  : 'Your artist',
+              artistName: effectiveArtistName,
               reviewUrl: reviewUrl,
               appLink: reviewUrl,
             );
@@ -5625,45 +5894,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
               preheader: clientContent.preheader,
             );
           }
-
-          // "All group clients" -- same union-of-sources pattern used for
-          // shipped-order emails.
-          final groupRecipients = <String, String>{};
-          for (final gc in hydrated.groupClients) {
-            final email = gc.clientEmail.trim().toLowerCase();
-            if (email.isEmpty) continue;
-            groupRecipients[email] = gc.clientName.trim();
-          }
-          for (final email in <String>[
-            ...hydrated.selectedGroupClientEmails,
-            ...hydrated.acceptedGroupClientEmails,
-          ]) {
-            final normalized = email.trim().toLowerCase();
-            if (normalized.isEmpty) continue;
-            groupRecipients.putIfAbsent(normalized, () => '');
-          }
-          groupRecipients.remove(clientEmail);
-          for (final entry in groupRecipients.entries) {
-            final groupContent = DeliveredEmailTemplates.client(
-              isGroupClient: true,
-              recipientFirstName: firstNameOf(entry.value),
-              primaryClientName: r.clientName,
-              orderNumber: orderRef,
-              deliveredDate: deliveredOnText,
-              artistName: artistEmail.isNotEmpty
-                  ? artistEmail.split('@').first
-                  : 'Your artist',
-              reviewUrl: reviewUrl,
-              appLink: reviewUrl,
-            );
-            await NotificationsService.queueEmail(
-              to: entry.key,
-              subject: groupContent.subject,
-              text: groupContent.text,
-              html: groupContent.html,
-              preheader: groupContent.preheader,
-            );
-          }
+          await sendGroupClientEmails(primaryClientNameForCopy: r.clientName);
         } catch (e) {
           debugPrint('[Artist Mark Delivered] failed: $e');
           if (!mounted) return;
@@ -5708,7 +5939,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        useSafeArea: false,
+        useSafeArea: true,
+        constraints: isTabletSize(MediaQuery.sizeOf(context))
+            ? const BoxConstraints(maxWidth: 1000)
+            : null,
         backgroundColor: Colors.transparent,
         builder: (_) => Semantics(
           scopesRoute: true,
@@ -5765,7 +5999,10 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: false,
+      useSafeArea: true,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000)
+          : null,
       backgroundColor: Colors.transparent,
       builder: (_) => Semantics(
         scopesRoute: true,
@@ -5791,8 +6028,11 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
           final accepted = await showModalBottomSheet<_AcceptResult>(
             context: context,
             isScrollControlled: true,
-            useSafeArea: false,
+            useSafeArea: true,
             useRootNavigator: true,
+            constraints: isTabletSize(MediaQuery.sizeOf(context))
+                ? const BoxConstraints(maxWidth: 700)
+                : null,
             backgroundColor: Colors.transparent,
             builder: (_) => Semantics(
               scopesRoute: true,
@@ -5977,6 +6217,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
   }
 
   Widget _tabList(int tabIndex) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     if (!_hasLoadedRequests && !_isLoadingDb && _all.isEmpty) {
       if (!_initialLoadScheduled) {
         _initialLoadScheduled = true;
@@ -6029,7 +6270,12 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 18),
+      padding: EdgeInsets.fromLTRB(
+        isTablet ? 24 : 16,
+        8,
+        isTablet ? 24 : 16,
+        18,
+      ),
       itemCount: items.length,
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (_, i) => _requestCard(items[i]),
@@ -6132,7 +6378,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
         borderRadius: BorderRadius.zero,
       ),
       child: Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 11 * s,
@@ -10211,7 +10457,7 @@ class InReviewDetailsSheet extends StatelessWidget {
         borderRadius: BorderRadius.zero,
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           fontSize: 8,
           fontWeight: FontWeight.w700,
@@ -10586,7 +10832,7 @@ class InReviewDetailsSheet extends StatelessWidget {
                       alignment: Alignment.center,
                       child: _requestTypePill(
                         context: context,
-                        text: 'NFC',
+                        text: 'JNT Tap',
                         icon: Icons.nfc_rounded,
                       ),
                     ),

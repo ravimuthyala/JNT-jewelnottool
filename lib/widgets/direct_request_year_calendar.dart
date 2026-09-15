@@ -152,7 +152,7 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
     return SizedBox(
       width: width,
       child: Container(
-        height: 30, // ✅ reduced size
+        constraints: const BoxConstraints(minHeight: 48),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -243,132 +243,158 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
     );
   }
 
-  Widget _chevron(VoidCallback onTap, IconData icon) {
+  Widget _chevron({
+    required VoidCallback onTap,
+    required IconData icon,
+    required String label,
+  }) {
     return IconButton(
+      tooltip: label,
       onPressed: onTap,
       icon: Icon(icon),
-      iconSize: 18, // ✅ reduced
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-      padding: EdgeInsets.zero,
+      iconSize: 18,
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      padding: const EdgeInsets.all(12),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width >= 900;
-    final crossAxisCount = isWide ? 4 : 2;
-    final cardHeight = isWide ? 240.0 : 260.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth =
+            constraints.hasBoundedWidth && constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final crossAxisCount = (availableWidth / 430).floor().clamp(1, 3);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header controls - responsive (no overflow)
-        LayoutBuilder(
-          builder: (context, constraints) {
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _legendDot(
-                  color: const Color(0xFF6FCF97),
-                  label: 'Direct Requests On',
+        return SingleChildScrollView(
+          primary: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header controls - responsive (no overflow)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _legendDot(
+                        color: const Color(0xFF6FCF97),
+                        label: 'Direct Requests On',
+                      ),
+                      _legendHatch(label: 'Blocked Off'),
+
+                      const SizedBox(width: 2),
+
+                      // ✅ Month first (matches year dropdown)
+                      _monthDropdown(width: 130),
+
+                      // ✅ Year controls second
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _chevron(
+                            onTap: () => setState(() => _selectedYear -= 1),
+                            icon: Icons.chevron_left,
+                            label: 'Previous year',
+                          ),
+                          _yearDropdown(width: 88),
+                          _chevron(
+                            onTap: () => setState(() => _selectedYear += 1),
+                            icon: Icons.chevron_right,
+                            label: 'Next year',
+                          ),
+                        ],
+                      ),
+
+                      TextButton(
+                        onPressed: _clearAll,
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(48, 48),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                        ),
+                        child: const Text(
+                          'Clear All',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              const SizedBox(height: 10),
+
+              // ✅ Month grid (filtered by selected month)
+              GridView.builder(
+                shrinkWrap: true,
+                primary: false,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _selectedMonth == 0 ? 12 : 1,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 450,
                 ),
-                _legendHatch(label: 'Blocked Off'),
-
-                const SizedBox(width: 2),
-
-                // ✅ Month first (matches year dropdown)
-                _monthDropdown(width: 100),
-
-                // ✅ Year controls second
+                itemBuilder: (_, i) {
+                  final monthToShow = _selectedMonth == 0
+                      ? (i + 1)
+                      : _selectedMonth;
+                  return _monthCard(_selectedYear, monthToShow);
+                },
+              ),
+              if (widget.showDirectRequestsFooter) ...[
+                const SizedBox(height: 12),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _chevron(
-                      () => setState(() => _selectedYear -= 1),
-                      Icons.chevron_left,
+                    const Text(
+                      'Direct Requests',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    _yearDropdown(width: 65),
-                    _chevron(
-                      () => setState(() => _selectedYear += 1),
-                      Icons.chevron_right,
+                    const Spacer(),
+                    Switch(
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
+                      value: _directRequestsOn,
+                      activeThumbColor: AppColors.deepPlum,
+                      inactiveThumbColor: AppColors.blackCatLight,
+                      inactiveTrackColor: AppColors.blackCatLight.withValues(
+                        alpha: 0.35,
+                      ),
+                      onChanged: (v) {
+                        setState(() => _directRequestsOn = v);
+                        _emit();
+                      },
                     ),
                   ],
                 ),
-
-                TextButton(
-                  onPressed: _clearAll,
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: const Text(
-                    'Clear All',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                Text(
+                  _directRequestsOn
+                      ? 'Clients can send Direct Requests on unblocked dates.'
+                      : 'Direct Requests are currently turned OFF.',
+                  style: TextStyle(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    fontWeight: FontWeight.w400,
+                    fontSize: 9.5,
                   ),
                 ),
               ],
-            );
-          },
-        ),
-
-        const SizedBox(height: 10),
-
-        // ✅ Month grid (filtered by selected month)
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _selectedMonth == 0 ? 12 : 1,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            mainAxisExtent: cardHeight,
-          ),
-          itemBuilder: (_, i) {
-            final monthToShow = _selectedMonth == 0 ? (i + 1) : _selectedMonth;
-            return _monthCard(_selectedYear, monthToShow);
-          },
-        ),
-        if (widget.showDirectRequestsFooter) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Text(
-                'Direct Requests',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Switch(
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                value: _directRequestsOn,
-                activeThumbColor: AppColors.deepPlum,
-                inactiveThumbColor: AppColors.blackCatLight,
-                inactiveTrackColor: AppColors.blackCatLight.withValues(alpha: 0.35),
-                onChanged: (v) {
-                  setState(() => _directRequestsOn = v);
-                  _emit();
-                },
-              ),
             ],
           ),
-          Text(
-            _directRequestsOn
-                ? 'Clients can send Direct Requests on unblocked dates.'
-                : 'Direct Requests are currently turned OFF.',
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.6),
-              fontWeight: FontWeight.w400,
-              fontSize: 9.5,
-            ),
-          ),
-        ],
-      ],
+        );
+      },
     );
   }
 
@@ -410,12 +436,14 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
           Semantics(
             button: true,
             label: 'Toggle all days in ${_months[month - 1]} $year',
+            onTap: () => _toggleMonth(year, month),
             child: ExcludeSemantics(
               child: InkWell(
                 borderRadius: BorderRadius.zero,
                 onTap: () => _toggleMonth(year, month),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  alignment: Alignment.center,
                   child: Text(
                     '${_months[month - 1]} $year',
                     style: const TextStyle(
@@ -460,16 +488,24 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                       Semantics(
                         button: true,
                         label: 'Toggle week of ${_months[month - 1]} $year',
+                        onTap: () => _toggleWeek(safeWeek, month),
                         child: ExcludeSemantics(
                           child: InkWell(
                             onTap: () => _toggleWeek(safeWeek, month),
                             borderRadius: BorderRadius.zero,
-                            child: Container(
-                              width: 10,
-                              margin: const EdgeInsets.only(right: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.zero,
+                            child: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  width: 18,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -489,15 +525,20 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                               child: Center(
                                 child: Semantics(
                                   button: true,
-                                  label: '${_months[d.month - 1]} ${d.day}, ${d.year}',
+                                  label:
+                                      '${_months[d.month - 1]} ${d.day}, ${d.year}',
                                   selected: blocked,
+                                  hint: blocked
+                                      ? 'Blocked. Double tap to unblock this date'
+                                      : 'Available. Double tap to block this date',
+                                  onTap: () => _toggleDay(d),
                                   child: ExcludeSemantics(
                                     child: InkWell(
                                       onTap: () => _toggleDay(d),
                                       borderRadius: BorderRadius.zero,
                                       child: Container(
-                                        width: 22,
-                                        height: 22,
+                                        width: 48,
+                                        height: 48,
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
                                           color: blocked
@@ -517,7 +558,9 @@ class _DirectRequestYearCalendarState extends State<DirectRequestYearCalendar> {
                                           style: TextStyle(
                                             fontSize: 9.5,
                                             fontWeight: FontWeight.w700,
-                                            color: Colors.black.withValues(alpha: 0.75),
+                                            color: Colors.black.withValues(
+                                              alpha: 0.75,
+                                            ),
                                           ),
                                         ),
                                       ),

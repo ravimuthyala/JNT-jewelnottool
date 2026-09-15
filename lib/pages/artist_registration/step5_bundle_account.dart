@@ -6,6 +6,7 @@ import '../artist_checkout_page.dart';
 import '../../services/supabase_auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/registration_input_utils.dart';
+import '../../widgets/responsive_field_row.dart';
 import '_widgets/reg_helpers.dart';
 import 'registration_draft.dart';
 
@@ -265,8 +266,8 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
   }) async {
     final d = widget.draft;
     final info = ArtistCheckoutInfo(
-      artistName: d.displayName.isNotEmpty
-          ? d.displayName
+      artistName: d.fullName.isNotEmpty
+          ? d.fullName
           : (d.studioName.isNotEmpty ? d.studioName : d.email),
       email: _emailCtrl.text.trim(),
       phone: '${d.phoneAreaCode}${d.phone}',
@@ -375,69 +376,93 @@ class Step5BundleAccountState extends State<Step5BundleAccount> {
                 ),
                 _buildEmailAvailabilityStatus(),
                 const SizedBox(height: kFieldGap),
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _passCtrl,
-                  obscureText: _obscurePass,
-                  textInputAction: TextInputAction.next,
-                  onChanged: _onPasswordChanged,
-                  validator: _passwordValidator,
-                  decoration: regDec(
-                    'Password',
-                    'At least 8 characters',
-                    suffixIcon: IconButton(
-                      tooltip: _obscurePass ? 'Show password' : 'Hide password',
-                      icon: Icon(
-                        _obscurePass ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.blackCatLight,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePass = !_obscurePass),
+                ResponsiveFieldRow(
+                  gap: kFieldGap,
+                  fields: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _passCtrl,
+                            obscureText: _obscurePass,
+                            textInputAction: TextInputAction.next,
+                            onChanged: _onPasswordChanged,
+                            validator: _passwordValidator,
+                            decoration: regDec(
+                              'Password',
+                              'At least 8 characters',
+                              suffixIcon: IconButton(
+                                tooltip: _obscurePass
+                                    ? 'Show password'
+                                    : 'Hide password',
+                                icon: Icon(
+                                  _obscurePass
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: AppColors.blackCatLight,
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscurePass = !_obscurePass,
+                                ),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              color: Color(0xFF292222),
+                              fontSize: 14,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                        _buildPasswordStatus(),
+                      ],
                     ),
-                  ),
-                  style: const TextStyle(
-                    color: Color(0xFF292222),
-                    fontSize: 14,
-                    fontFamily: 'Arial',
-                  ),
-                  ),
-                ),
-                _buildPasswordStatus(),
-                const SizedBox(height: kFieldGap),
-                Semantics(
-                  isRequired: true,
-                  child: TextFormField(
-                  controller: _confirmCtrl,
-                  obscureText: _obscureConfirm,
-                  textInputAction: TextInputAction.done,
-                  onChanged: _onConfirmPasswordChanged,
-                  validator: _confirmPasswordValidator,
-                  decoration: regDec(
-                    'Confirm password',
-                    '',
-                    suffixIcon: IconButton(
-                      tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
-                      icon: Icon(
-                        _obscureConfirm
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: AppColors.blackCatLight,
-                        size: 20,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscureConfirm = !_obscureConfirm),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Semantics(
+                          isRequired: true,
+                          child: TextFormField(
+                            controller: _confirmCtrl,
+                            obscureText: _obscureConfirm,
+                            textInputAction: TextInputAction.done,
+                            onChanged: _onConfirmPasswordChanged,
+                            validator: _confirmPasswordValidator,
+                            decoration: regDec(
+                              'Confirm password',
+                              '',
+                              suffixIcon: IconButton(
+                                tooltip: _obscureConfirm
+                                    ? 'Show password'
+                                    : 'Hide password',
+                                icon: Icon(
+                                  _obscureConfirm
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
+                                  color: AppColors.blackCatLight,
+                                  size: 20,
+                                ),
+                                onPressed: () => setState(
+                                  () => _obscureConfirm = !_obscureConfirm,
+                                ),
+                              ),
+                            ),
+                            style: const TextStyle(
+                              color: Color(0xFF292222),
+                              fontSize: 14,
+                              fontFamily: 'Arial',
+                            ),
+                          ),
+                        ),
+                        _buildConfirmPasswordStatus(),
+                      ],
                     ),
-                  ),
-                  style: const TextStyle(
-                    color: Color(0xFF292222),
-                    fontSize: 14,
-                    fontFamily: 'Arial',
-                  ),
-                  ),
+                  ],
                 ),
-                _buildConfirmPasswordStatus(),
               ],
             ),
           ),

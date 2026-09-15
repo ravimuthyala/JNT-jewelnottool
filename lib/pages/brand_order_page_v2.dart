@@ -6,6 +6,7 @@ import '../models/client_profile_models.dart';
 import '../theme/app_colors.dart';
 import '../services/client_custom_request_repository.dart';
 import '../utils/date_format_utils.dart';
+import '../utlis/responsive_layout.dart';
 import '../services/notifications_service.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
@@ -53,7 +54,7 @@ class BrandOrderPageV2 extends StatefulWidget {
 
 class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
   OrdersFilter _filter = OrdersFilter.all;
-  RealtimeChannel? _submittedRequestsChannel;
+  List<RealtimeChannel> _submittedRequestsChannels = const [];
   List<ClientOrder> _submittedOrders = const [];
   bool _loadingOrders = true;
   StreamSubscription<List<ChatNotificationRef>>? _unreadChatSub;
@@ -224,8 +225,8 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   @override
   void dispose() {
-    if (_submittedRequestsChannel != null) {
-      unawaited(_client.removeChannel(_submittedRequestsChannel!));
+    for (final channel in _submittedRequestsChannels) {
+      unawaited(_client.removeChannel(channel));
     }
     _unreadChatSub?.cancel();
     super.dispose();
@@ -233,10 +234,10 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   Future<void> _subscribeSubmittedOrders() async {
     try {
-      if (_submittedRequestsChannel != null) {
-        unawaited(_client.removeChannel(_submittedRequestsChannel!));
-        _submittedRequestsChannel = null;
+      for (final channel in _submittedRequestsChannels) {
+        unawaited(_client.removeChannel(channel));
       }
+      _submittedRequestsChannels = const [];
       final authEmail = _currentEmail;
       final profileEmail = widget.profile.basic.email.trim().toLowerCase();
       final effectiveEmail = profileEmail.isNotEmpty ? profileEmail : authEmail;
@@ -245,24 +246,58 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           ? profileName
           : widget.companyName.trim();
       final uid = _currentUid;
-      _submittedRequestsChannel =
-          _client.channel('brand-order-company-custom-requests')
-            ..onPostgresChanges(
-              event: PostgresChangeEvent.all,
-              schema: 'public',
-              table: 'company_custom_requests',
-              callback: (_) {
-                unawaited(
-                  _loadSubmittedOrders(
-                    authEmail: authEmail,
-                    effectiveEmail: effectiveEmail,
-                    effectiveName: effectiveName,
-                    uid: uid,
-                  ),
-                );
-              },
-            );
-      await _submittedRequestsChannel!.subscribe();
+
+      void reload() {
+        unawaited(
+          _loadSubmittedOrders(
+            authEmail: authEmail,
+            effectiveEmail: effectiveEmail,
+            effectiveName: effectiveName,
+            uid: uid,
+          ),
+        );
+      }
+
+      // A brand's own requests can be keyed by any of several ownership
+      // columns (uid alias or company/client email), so one filtered
+      // realtime channel per candidate column keeps updates scoped to this
+      // brand instead of subscribing to the whole table.
+      final channels = <RealtimeChannel>[];
+      var channelIndex = 0;
+      void addFilteredChannel(String column, String value) {
+        if (value.isEmpty) return;
+        channelIndex++;
+        final channel =
+            _client.channel('brand-order-company-custom-requests-$channelIndex')
+              ..onPostgresChanges(
+                event: PostgresChangeEvent.all,
+                schema: 'public',
+                table: 'company_custom_requests',
+                filter: PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: column,
+                  value: value,
+                ),
+                callback: (_) => reload(),
+              );
+        channels.add(channel);
+      }
+
+      addFilteredChannel('company_uid', uid);
+      addFilteredChannel('requester_uid', uid);
+      addFilteredChannel('created_by_uid', uid);
+      addFilteredChannel('uid', uid);
+      addFilteredChannel('company_email', effectiveEmail);
+      addFilteredChannel('client_email', effectiveEmail);
+      if (authEmail.isNotEmpty && authEmail != effectiveEmail) {
+        addFilteredChannel('company_email', authEmail);
+        addFilteredChannel('client_email', authEmail);
+      }
+
+      for (final channel in channels) {
+        await channel.subscribe();
+      }
+      _submittedRequestsChannels = channels;
       await _loadSubmittedOrders(
         authEmail: authEmail,
         effectiveEmail: effectiveEmail,
@@ -281,7 +316,13 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     required String uid,
   }) async {
     try {
-      final rows = await _client.from('company_custom_requests').select();
+      final orFilter = _buildCompanyOwnershipOrFilter(
+        authEmail: authEmail,
+        effectiveEmail: effectiveEmail,
+        effectiveName: effectiveName,
+      );
+      final query = _client.from('company_custom_requests').select();
+      final rows = orFilter == null ? await query : await query.or(orFilter);
       final rowMaps = rows
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
@@ -415,11 +456,81 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
     return req.sourceCollection == 'Company_Custom_Requests';
   }
 
+  /// Server-side superset filter mirroring every candidate field
+  /// `_matchesCompanyRequest` checks, so the DB only returns rows that could
+  /// possibly belong to this brand instead of the whole platform's requests.
+  /// `_matchesCompanyRequest` still runs afterward as the exact filter.
+  String? _buildCompanyOwnershipOrFilter({
+    required String authEmail,
+    required String effectiveEmail,
+    required String effectiveName,
+  }) {
+    final emails = <String>{
+      effectiveEmail,
+      authEmail,
+    }..removeWhere((e) => e.isEmpty);
+    final uid = _currentUid;
+    final conditions = <String>[];
+
+    if (uid.isNotEmpty) {
+      for (final col in const [
+        'company_uid',
+        'requester_uid',
+        'created_by_uid',
+        'uid',
+      ]) {
+        conditions.add('$col.eq.$uid');
+      }
+      for (final path in const [
+        'payload->>company_uid',
+        'payload->>companyUid',
+        'details->>company_uid',
+        'details->>companyUid',
+      ]) {
+        conditions.add('$path.eq.$uid');
+      }
+    }
+    for (final email in emails) {
+      for (final col in const ['company_email', 'client_email']) {
+        conditions.add('$col.ilike.$email');
+      }
+      for (final path in const [
+        'payload->>company_email',
+        'payload->>companyEmail',
+        'payload->>client_email',
+        'payload->>clientEmail',
+        'details->>company_email',
+        'details->>companyEmail',
+        'details->>client_email',
+        'details->>clientEmail',
+      ]) {
+        conditions.add('$path.ilike.$email');
+      }
+    }
+    if (effectiveName.isNotEmpty) {
+      for (final col in const ['company_name', 'client_name']) {
+        conditions.add('$col.ilike.$effectiveName');
+      }
+      for (final path in const [
+        'payload->>company_name',
+        'payload->>companyName',
+        'payload->>client_name',
+        'payload->>clientName',
+        'details->>company_name',
+        'details->>companyName',
+        'details->>client_name',
+        'details->>clientName',
+      ]) {
+        conditions.add('$path.ilike.$effectiveName');
+      }
+    }
+    if (conditions.isEmpty) return null;
+    return conditions.join(',');
+  }
+
   Future<void> _syncExpiredRequests(
     List<SubmittedClientRequestSummary> items,
   ) async {
-    const expirationReason =
-        'Request was not accepted by artist, and it is past due.';
     final now = DateTime.now();
     for (final req in items) {
       final raw = req.status.trim().toLowerCase();
@@ -436,11 +547,31 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
       final artistAccepted = req.acceptedByArtistEmail.trim().isNotEmpty;
       if (artistAccepted) continue;
       final due = req.needBy;
-      if (due == null) continue;
-      final pastDue = now.isAfter(
-        DateTime(due.year, due.month, due.day).add(const Duration(days: 1)),
-      );
-      if (!pastDue) continue;
+      final pastDue =
+          due != null &&
+          now.isAfter(
+            DateTime(
+              due.year,
+              due.month,
+              due.day,
+            ).add(const Duration(days: 1)),
+          );
+      // Before any client has accepted, the earlier accept-by date is the
+      // deadline; only once a client has does the request get the full
+      // runway to the need-by date for an artist to pick it up. The precise
+      // check (incl. group acceptance) happens below, once the current row
+      // is fetched -- this is just the cheap pre-filter.
+      final acceptBy = req.requestAcceptBy ?? due;
+      final pastAcceptBy =
+          acceptBy != null &&
+          now.isAfter(
+            DateTime(
+              acceptBy.year,
+              acceptBy.month,
+              acceptBy.day,
+            ).add(const Duration(days: 1)),
+          );
+      if (!pastAcceptBy) continue;
 
       try {
         final row = await _client
@@ -461,6 +592,20 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
           current['acceptedByClientEmail'],
           req.acceptedByClientEmail,
         ]).toLowerCase();
+        final hasAnyClientAcceptance =
+            acceptedClientEmail.isNotEmpty ||
+            <Object?>[
+              current['acceptedGroupClientEmails'],
+              current['accepted_group_client_emails'],
+              payload['acceptedGroupClientEmails'],
+              details['acceptedGroupClientEmails'],
+            ].any((value) => value is List && value.isNotEmpty);
+        // At least one client is in -- the request now runs on the need-by
+        // date, waiting on an artist, not the accept-by date.
+        if (hasAnyClientAcceptance && !pastDue) continue;
+        final expirationReason = hasAnyClientAcceptance
+            ? 'Request was not accepted by artist, and it is past due.'
+            : 'Request was not accepted by any client, and it is past due.';
         final currentStatus = firstNonEmpty([
           current['status'],
           current['client_status'],
@@ -562,7 +707,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: const <String, dynamic>{'reason': expirationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
@@ -576,7 +721,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
               orderId: req.id,
               orderNumber: req.orderNumber,
               sourceCollection: collection,
-              extra: const <String, dynamic>{'reason': expirationReason},
+              extra: <String, dynamic>{'reason': expirationReason},
             );
           }
 
@@ -588,7 +733,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
             orderId: req.id,
             orderNumber: req.orderNumber,
             sourceCollection: collection,
-            extra: const <String, dynamic>{'reason': expirationReason},
+            extra: <String, dynamic>{'reason': expirationReason},
           );
         }
       } catch (_) {}
@@ -951,6 +1096,7 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     return Semantics(
       scopesRoute: true,
       explicitChildNodes: true,
@@ -983,9 +1129,19 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                 ),
               ),
 
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 22),
-          children: [
+        body: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isTablet ? 1200 : double.infinity,
+            ),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                isTablet ? 24 : 16,
+                8,
+                isTablet ? 24 : 16,
+                22,
+              ),
+              children: [
             _FilterTabs(
               selected: _filter,
               counts: <OrdersFilter, int>{
@@ -1135,7 +1291,9 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                 ),
               ),
             ],
-          ],
+              ],
+            ),
+          ),
         ),
         bottomNavigationBar: widget.showCompanyChrome
             ? CompanyBottomNav(
@@ -1208,10 +1366,17 @@ class _BrandOrderPageV2State extends State<BrandOrderPageV2> {
                 borderRadius: BorderRadius.zero,
                 child: Material(
                   color: AppColors.alabaster,
-                  child: SizedBox(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: isTabletSize(MediaQuery.sizeOf(context))
+                          ? 1000
+                          : double.infinity,
+                    ),
+                    child: SizedBox(
                     width: double.infinity,
                     height: double.infinity,
                     child: page,
+                    ),
                   ),
                 ),
               ),

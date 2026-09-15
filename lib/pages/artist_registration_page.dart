@@ -14,6 +14,7 @@ import '../services/supabase_auth_service.dart';
 import '../services/auth_email_alias_service.dart';
 import '../config/auth_flags.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/registration_input_utils.dart';
 import '../constants/currency_options.dart';
@@ -822,7 +823,15 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   }
 
   Future<void> _pickPortfolioImages() async {
-    final files = await _picker.pickMultiImage(imageQuality: 90);
+    // Deliberately NOT passing imageQuality here. image_picker's native
+    // multi-select compression path has a known bug (Android especially)
+    // where every selected image gets compressed to the SAME temp
+    // filename, so every returned XFile ends up pointing at the
+    // last-written file -- the user picks several distinct photos and
+    // gets copies of one. Compression already happens per-file below, so
+    // the native param was redundant with it and is what caused the
+    // duplication.
+    final files = await _picker.pickMultiImage();
     if (files.isEmpty) return;
 
     final bytesList = <Uint8List>[];
@@ -1153,6 +1162,16 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
     String? Function(String?)? validator,
   }) {
     return FormField<String>(
+      // Include the externally selected value in the key so values populated
+      // by address lookup/autofill become the FormField's real initial value
+      // instead of leaving the field stuck empty -- FormField/Autocomplete's
+      // own `initialValue` params are only ever applied once, at first
+      // build, and don't re-sync when this widget rebuilds with a new
+      // `selectedValue` from outside. Matches the same fix already applied
+      // in client_artist_registration_page.dart's equivalent picker.
+      key: ValueKey<String>(
+        'registration-choice-$label-${(selectedValue ?? '').trim()}',
+      ),
       initialValue: selectedValue,
       validator: validator,
       builder: (field) {
@@ -1919,10 +1938,14 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   Future<void> _showAgeIneligibleDialog() async {
     await showRegistrationAgeIneligibleDialog(context: context);
     if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const ArtistLoginPage()),
-      (route) => false,
-    );
+    // Same close sequence as this page's own X button -- an ineligible DOB
+    // means this signup attempt can't continue, so send them back to the
+    // role picker rather than leaving them stuck here.
+    fullBleedPageActive.value = false;
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pushNamedAndRemoveUntil('/register', (route) => false);
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -1943,11 +1966,19 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
   }
 
   // Lets a sighted or screen-reader user type the date directly instead of
-  // requiring the calendar picker. Age-eligibility is re-checked at submit
-  // time regardless of entry method, so this only needs to track the parsed
-  // value -- not repeat that check on every keystroke.
+  // requiring the calendar picker. Checks eligibility as soon as a complete,
+  // parseable date is typed -- matches the picker path so the ineligibility
+  // dialog fires right at the DOB field itself, not only later at submit.
+  // tryParseMmDdYyyy returns null for an incomplete in-progress string, so
+  // this doesn't fire on every keystroke, only once the date is complete.
   void _onDateOfBirthTyped(String value) {
-    setState(() => _dateOfBirth = tryParseMmDdYyyy(value));
+    final parsed = tryParseMmDdYyyy(value);
+    setState(() => _dateOfBirth = parsed);
+    if (parsed != null &&
+        !RegistrationInputUtils.isEligibleByDateOfBirth(parsed) &&
+        mounted) {
+      _showAgeIneligibleDialog();
+    }
   }
 
   // -----------------------
@@ -1978,10 +2009,19 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
         child: Scaffold(
           backgroundColor: AppColors.snow,
           appBar: JntModalAppBar(
-            onClose: () => Navigator.of(
-              context,
-              rootNavigator: true,
-            ).pushNamedAndRemoveUntil('/register', (route) => false),
+            onClose: () {
+              // Set synchronously rather than relying on HomePage's own
+              // dispose() -- this bulk-removes the whole route stack
+              // (including a possibly-still-mounted, not-yet-disposed
+              // Home), and Flutter defers disposal of removed routes until
+              // their transition finishes, which was letting '/register'
+              // paint once uncapped before snapping to the tablet frame.
+              fullBleedPageActive.value = false;
+              Navigator.of(
+                context,
+                rootNavigator: true,
+              ).pushNamedAndRemoveUntil('/register', (route) => false);
+            },
             closeTooltip: 'Close artist registration',
             closeIcon: const Icon(Icons.close),
           ),
@@ -3267,7 +3307,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                   _sectionCard(
                     title: 'Portfolio',
                     subtitle:
-                        'Upload Previous Art. (${_portfolioImages.length} photo(s))',
+                        'Upload Previous Portfolio Photos. (${_portfolioImages.length} photo(s))',
                     gradient: const LinearGradient(
                       colors: [Color(0xFFF5F0FF), Color(0xFFEAF7F2)],
                     ),
@@ -3286,7 +3326,7 @@ class _ArtistRegistrationPageState extends State<ArtistRegistrationPage> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Upload previous Art',
+                                'Upload Previous Portfolio Photos',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,

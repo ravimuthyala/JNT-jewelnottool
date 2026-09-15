@@ -14,6 +14,7 @@ import '../services/ascension_service.dart';
 import '../services/notifications_service.dart';
 import '../services/storage_url_resolver.dart' as storage_resolver;
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../utils/date_format_utils.dart';
 import '../utils/image_cache_utils.dart';
 import '../utils/scenario_4_1.dart';
@@ -1144,6 +1145,9 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
+      constraints: isTabletSize(MediaQuery.sizeOf(context))
+          ? const BoxConstraints(maxWidth: 1000.0)
+          : null,
       builder: (sheetContext) {
         return ClientCampaignDetailsPage(
           request: request,
@@ -1335,6 +1339,43 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       throw Exception('Missing signed-in artist email.');
     }
 
+    final table = _tableForRequestCollection(request.sourceCollection);
+
+    // Re-check against a fresh fetch before declining -- not the possibly-
+    // stale in-memory `request` this card was built from. Mirrors the same
+    // guard added to the other _persistArtistDecline implementation in
+    // artist_requests_page_redesign.dart: an artist shouldn't be able to
+    // decline a request another artist already accepted, or one that's
+    // already closed out, just because their local list hasn't refreshed.
+    final existingRow = await _supabase
+        .from(table)
+        .select()
+        .eq('id', request.id)
+        .maybeSingle();
+    if (existingRow == null) {
+      throw Exception('This request is no longer available to decline.');
+    }
+    final existingMap = Map<String, dynamic>.from(existingRow);
+    final existingStatus = (existingMap['status'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final existingAcceptedByArtistEmail =
+        (existingMap['accepted_by_artist_email'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    const nonDeclinableStatuses = <String>{
+      'declined',
+      'cancelled',
+      'canceled',
+      'expired',
+    };
+    if (existingAcceptedByArtistEmail.isNotEmpty ||
+        nonDeclinableStatuses.contains(existingStatus)) {
+      throw Exception('This request is no longer available to decline.');
+    }
+
     try {
       await _supabase.rpc(
         'artist_decline_request_for_history',
@@ -1351,16 +1392,23 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       );
     }
 
-    final table = _tableForRequestCollection(request.sourceCollection);
     final declinedAtIso = DateTime.now().toUtc().toIso8601String();
     const reason = 'Artist declined the request';
+    // A plain pool (non-direct) request is a single row visible to every
+    // candidate artist -- writing status as 'declined' here would close the
+    // request out for the client and every OTHER artist still considering
+    // it, not just this one. Leave the shared status fields untouched in
+    // that case and only record this artist's own decline.
+    final isPlainPoolDecline = !request.isDirectRequest;
 
     await _supabase
         .from(table)
         .update(<String, dynamic>{
-          'status': 'declined',
-          'artist_status': 'declined',
-          'direct_artist_status': 'declined',
+          if (!isPlainPoolDecline) ...{
+            'status': 'declined',
+            'artist_status': 'declined',
+            'direct_artist_status': 'declined',
+          },
           'declined_by_artist_email': artistEmail,
           'artist_declined_at': declinedAtIso,
           'completion_decline_reason': reason,
@@ -1443,17 +1491,25 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
           request.neededBy.month,
           request.neededBy.day,
         ).subtract(const Duration(days: 5));
+    // Gate 1 of the expiry rule: expired only when no artist has picked the
+    // request up AND no client has accepted it yet by the accept-by date --
+    // a partial decline (some clients said no, others haven't answered)
+    // does not count as a timeout as long as nobody has accepted.
+    final artistAccepted = request.acceptedByArtistEmail.trim().isNotEmpty;
+    final anyClientAccepted =
+        request.acceptedByClientEmail.trim().isNotEmpty ||
+        request.acceptedGroupClientEmails.isNotEmpty;
     final brandRequestTimedOut =
         _isCompanyCustomRequestSource(request.sourceCollection) &&
+        !artistAccepted &&
+        !anyClientAccepted &&
         DateTime.now().isAfter(
           DateTime(
             brandRequestAcceptBy.year,
             brandRequestAcceptBy.month,
             brandRequestAcceptBy.day,
           ).add(const Duration(days: 1)),
-        ) &&
-        request.acceptedByClientEmail.trim().isEmpty &&
-        request.declinedByClientEmails.isEmpty;
+        );
 
     if (brandRequestTimedOut && !accept) {
       final acceptByLabel = _firstNonEmpty(<Object?>[
@@ -1461,18 +1517,18 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
         detailsData['requestAcceptByDisplay'],
         orderData['requestAcceptByDisplay'],
       ], fallback: _monthDayYear(brandRequestAcceptBy));
-      final cancellationReason =
+      final expirationReason =
           'Request was not accepted/rejected by $acceptByLabel';
       await _persistStatusUpdate(
         request: request,
-        status: 'cancelled',
+        status: 'expired',
         summaryExtra: <String, dynamic>{
-          'cancelReason': cancellationReason,
-          'cancelledAt': DateTime.now().toIso8601String(),
+          'expiredReason': expirationReason,
+          'expiredAt': DateTime.now().toIso8601String(),
         },
         detailsExtra: <String, dynamic>{
-          'cancelReason': cancellationReason,
-          'cancelledAt': DateTime.now().toIso8601String(),
+          'expiredReason': expirationReason,
+          'expiredAt': DateTime.now().toIso8601String(),
         },
       );
       return;
@@ -2011,7 +2067,7 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
                   if (revealDate.isNotEmpty) 'JNT Reveal Date $revealDate',
                   'Submitted Date $submittedDate',
                   if (acceptByDate.isNotEmpty) 'Accept By $acceptByDate',
-                  if (nfcSnap.data == true) 'NFC eligible',
+                  if (nfcSnap.data == true) 'JNT Tap eligible',
                 ].join(', ');
                 return Semantics(
                   key: _requestCardSemanticsKeys.putIfAbsent(
@@ -2091,7 +2147,11 @@ class _ClientCampaignsPageState extends State<ClientCampaignsPage> {
       }
 
       content = ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        padding: responsivePagePadding(
+          context,
+          phone: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          maxContentWidth: 900,
+        ),
         children: [
           if (widget.splitArtistVisibleRequestsBySource &&
               widget.showClientRequests &&

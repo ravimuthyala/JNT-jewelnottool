@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_colors.dart';
@@ -690,14 +691,22 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
       return;
     }
 
-    final files = await _picker.pickMultiImage(imageQuality: 85);
+    // Deliberately NOT passing imageQuality here. image_picker's native
+    // multi-select compression path has a known bug (Android especially)
+    // where every selected image gets compressed to the SAME temp
+    // filename, so every returned XFile ends up pointing at the
+    // last-written file. Compression now happens per-file below via
+    // _compressCompletedPhoto instead, which also fixes the fact that
+    // completed photos previously had no size limit at all -- raw
+    // full-resolution camera photos were being stored/uploaded as-is.
+    final files = await _picker.pickMultiImage();
     if (files.isEmpty) return;
 
     final remainingSlots = _maxCompletedPhotos - _order.completedPhotos.length;
     final selected = files.take(remainingSlots).toList(growable: false);
     final added = <Uint8List>[];
     for (final f in selected) {
-      added.add(await f.readAsBytes());
+      added.add(_compressCompletedPhoto(await f.readAsBytes()));
     }
 
     _pushUpdate(
@@ -714,6 +723,53 @@ class _InProgressScaffoldState extends State<_InProgressScaffold> {
           content: Text('Extra photos were skipped. Maximum is 10.'),
         ),
       );
+    }
+  }
+
+  /// Resizes/re-encodes a picked photo to a reasonable size for storage --
+  /// mirrors the compression pattern already used elsewhere in this app
+  /// (e.g. client_artist_registration_page.dart's
+  /// _optimizePortfolioBytes). Falls back to the original bytes if
+  /// decoding fails (e.g. an already-small or unusual format) rather than
+  /// dropping the photo.
+  Uint8List _compressCompletedPhoto(
+    Uint8List source, {
+    int maxEdge = 1600,
+    int maxBytes = 2 * 1024 * 1024,
+  }) {
+    try {
+      final decoded = img.decodeImage(source);
+      if (decoded == null) return source;
+
+      img.Image processed = decoded;
+      final maxSide = processed.width > processed.height
+          ? processed.width
+          : processed.height;
+      if (maxSide > maxEdge) {
+        final scale = maxEdge / maxSide;
+        processed = img.copyResize(
+          processed,
+          width: (processed.width * scale).round(),
+          height: (processed.height * scale).round(),
+          interpolation: img.Interpolation.average,
+        );
+      }
+
+      for (var quality = 88; quality >= 60; quality -= 8) {
+        final encoded = img.encodeJpg(processed, quality: quality);
+        final bytes = Uint8List.fromList(encoded);
+        if (bytes.lengthInBytes <= maxBytes) return bytes;
+      }
+
+      final fallback = img.copyResize(
+        processed,
+        width: processed.width > processed.height ? 1200 : null,
+        height: processed.height >= processed.width ? 1200 : null,
+        interpolation: img.Interpolation.average,
+      );
+      return Uint8List.fromList(img.encodeJpg(fallback, quality: 58));
+    } catch (_) {
+      return source;
     }
   }
 

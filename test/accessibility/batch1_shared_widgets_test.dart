@@ -2,6 +2,7 @@
 // widgets. See lib/pages/home_page.dart for the accessibility convention
 // these widgets follow.
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:jewelnottool/widgets/role_pill.dart';
@@ -11,6 +12,7 @@ import 'package:jewelnottool/widgets/selectable_role_tile.dart';
 import 'package:jewelnottool/widgets/artist_profile_avatar_icon.dart';
 import 'package:jewelnottool/widgets/artist_ascension_card.dart';
 import 'package:jewelnottool/helpers/artist_ascension.dart';
+import 'package:jewelnottool/widgets/direct_request_year_calendar.dart';
 
 Widget _wrap(Widget child) {
   return MaterialApp(
@@ -68,7 +70,7 @@ void main() {
           RoleTileModern(
             title: 'Brand',
             subtitle: 'Order for your team',
-            iconAsset: 'assets/icons/brand.svg',
+            iconAsset: 'assets/icons/artist.svg',
             selected: false,
             onTap: () {},
           ),
@@ -80,7 +82,6 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       handle.dispose();
     },
-    skip: true, // requires the real SVG asset bundle; covered by manual QA
   );
 
   testWidgets(
@@ -108,9 +109,7 @@ void main() {
     (tester) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
-        _wrap(
-          const ArtistProfileAvatarIcon(displayName: 'Jane Doe', size: 40),
-        ),
+        _wrap(const ArtistProfileAvatarIcon(displayName: 'Jane Doe', size: 40)),
       );
       await tester.pump();
 
@@ -147,6 +146,65 @@ void main() {
 
     expect(find.bySemanticsLabel('Artist Ascension'), findsOneWidget);
     expect(find.bySemanticsLabel('Unlocked perks'), findsOneWidget);
+    handle.dispose();
+  });
+
+  testWidgets('Year calendar chevrons are labeled 48 pixel targets', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_wrap(const DirectRequestYearCalendar()));
+
+    expect(find.byTooltip('Previous year'), findsOneWidget);
+    expect(find.byTooltip('Next year'), findsOneWidget);
+    expect(
+      tester.getSize(find.byTooltip('Previous year')).width,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Previous year')).height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Next year')).width,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester.getSize(find.byTooltip('Next year')).height,
+      greaterThanOrEqualTo(48),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('Year calendar date controls expose semantic tap actions', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _wrap(
+        const DirectRequestYearCalendar(
+          initialYear: 2026,
+          initialMonth: 1,
+          showDirectRequestsFooter: false,
+        ),
+      ),
+    );
+
+    final monthData = tester
+        .getSemantics(find.bySemanticsLabel('Toggle all days in January 2026'))
+        .getSemanticsData();
+    final weekData = tester
+        .getSemantics(
+          find.bySemanticsLabel('Toggle week of January 2026').first,
+        )
+        .getSemanticsData();
+    final dayData = tester
+        .getSemantics(find.bySemanticsLabel('January 1, 2026'))
+        .getSemanticsData();
+
+    expect(monthData.actions & SemanticsAction.tap.index, isNonZero);
+    expect(weekData.actions & SemanticsAction.tap.index, isNonZero);
+    expect(dayData.actions & SemanticsAction.tap.index, isNonZero);
     handle.dispose();
   });
 

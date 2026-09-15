@@ -102,7 +102,7 @@ class ArtistRequestsRepository {
       );
       mapped['__sourceCollection'] = normalizedSource;
 
-      return _fromSupabaseRowWithDetails(
+      return await _fromSupabaseRowWithDetails(
         mapped,
         sourceCollection: normalizedSource,
       );
@@ -143,18 +143,32 @@ class ArtistRequestsRepository {
 
         if (rows is! List) return const <Map<String, dynamic>>[];
 
-        final mergedRows = await Future.wait(
-          rows.whereType<Map>().map((row) async {
-            final mapped = await _mergeRowWithDetails(
-              Map<String, dynamic>.from(row),
-              sourceCollection: sourceCollection,
-            );
-            mapped['__sourceCollection'] = sourceCollection;
-            return mapped;
-          }),
+        final rowMaps = rows
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+
+        // One batched IN(...) query per table instead of one details query
+        // per row -- previously up to `requestLimit` separate round trips.
+        final detailsTable = sourceCollection == 'Company_Custom_Requests'
+            ? 'company_custom_requests_details'
+            : 'client_custom_requests_details';
+        final detailsById = await _fetchDetailsBatch(
+          detailsTable,
+          rowMaps.map((row) => (row['id'] ?? '').toString().trim()),
         );
 
-        return mergedRows.toList(growable: false);
+        final mergedRows = rowMaps.map((row) {
+          final requestId = (row['id'] ?? '').toString().trim();
+          final details = detailsById[requestId];
+          final mapped = details != null
+              ? <String, dynamic>{...row, 'details': details}
+              : row;
+          mapped['__sourceCollection'] = sourceCollection;
+          return mapped;
+        }).toList(growable: false);
+
+        return mergedRows;
       } catch (e, st) {
         debugPrint('ARTIST REQUESTS Supabase fetch $tableName failed: $e');
         debugPrint(st.toString());
@@ -233,6 +247,44 @@ class ArtistRequestsRepository {
       );
       return row;
     }
+  }
+
+  static Future<Map<String, Map<String, dynamic>>> _fetchDetailsBatch(
+    String detailsTable,
+    Iterable<String> requestIds,
+  ) async {
+    final ids = requestIds
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final result = <String, Map<String, dynamic>>{};
+    if (ids.isEmpty) return result;
+
+    try {
+      final detailRows = await _supabase
+          .from(detailsTable)
+          .select()
+          .inFilter('request_id', ids);
+
+      final grouped = <String, List<Map<String, dynamic>>>{};
+      for (final raw in detailRows.whereType<Map>()) {
+        final row = Map<String, dynamic>.from(raw);
+        final requestId = (row['request_id'] ?? '').toString().trim();
+        if (requestId.isEmpty) continue;
+        (grouped[requestId] ??= <Map<String, dynamic>>[]).add(row);
+      }
+
+      for (final entry in grouped.entries) {
+        final merged = _mergeDetailRows(entry.value);
+        if (merged.isNotEmpty) result[entry.key] = merged;
+      }
+    } catch (e, st) {
+      debugPrint(
+        'ARTIST REQUESTS batched detail fetch failed for $detailsTable: $e',
+      );
+      debugPrint(st.toString());
+    }
+    return result;
   }
 
   static Map<String, dynamic> _mergeDetailRows(dynamic rows) {
@@ -425,6 +477,8 @@ class ArtistRequestsRepository {
         _toDate(data['updatedAt']) ??
         _toDate(data['updated_at']) ??
         DateTime.now();
+    final requestAcceptBy =
+        _toDate(data['requestAcceptBy']) ?? _toDate(data['request_accept_by']);
 
     final selectedArtist = _firstNonEmptyString(
       data['selectedArtist'],
@@ -572,6 +626,7 @@ class ArtistRequestsRepository {
       title: title,
       subtitle: subtitle,
       neededBy: neededBy,
+      requestAcceptBy: requestAcceptBy,
       submittedAt: _toDate(data['createdAt']) ?? _toDate(data['created_at']),
       budgetMin: safeBudgetMin,
       budgetMax: safeBudgetMax,
@@ -710,6 +765,11 @@ class ArtistRequestsRepository {
         _toDate(data['createdAt']) ??
         _toDate(data['created_at']) ??
         DateTime.now();
+    final requestAcceptBy =
+        _toDate(data['requestAcceptBy']) ??
+        _toDate(data['request_accept_by']) ??
+        _toDate(detailData['requestAcceptBy']) ??
+        _toDate(detailData['request_accept_by']);
 
     final location = _locationFromData(data);
     final submittedAt =
@@ -1472,6 +1532,7 @@ class ArtistRequestsRepository {
       title: title,
       subtitle: subtitle,
       neededBy: neededBy,
+      requestAcceptBy: requestAcceptBy,
       submittedAt: submittedAt,
       budgetMin: budgetMin,
       budgetMax: budgetMax,

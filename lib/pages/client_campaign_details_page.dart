@@ -10,6 +10,7 @@ import '../constants/profile_table_columns.dart';
 import '../models/client_request_v2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
+import '../utlis/responsive_layout.dart';
 import '../utils/date_format_utils.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/request_modal_accessibility.dart';
@@ -115,9 +116,12 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   Widget build(BuildContext context) {
     final safeBottom = MediaQuery.of(context).viewPadding.bottom;
     final maxH = MediaQuery.of(context).size.height * 0.96;
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+    final modalHorizontalPadding = isTablet ? 24.0 : 16.0;
     return Align(
         alignment: Alignment.bottomCenter,
         child: Container(
+          width: double.infinity,
           constraints: BoxConstraints(maxHeight: maxH),
           decoration: const BoxDecoration(color: AppColors.snow),
           child: FutureBuilder<_RequestDetailsVm>(
@@ -181,7 +185,12 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       controller: _listController,
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+                      padding: EdgeInsets.fromLTRB(
+                        modalHorizontalPadding,
+                        18,
+                        modalHorizontalPadding,
+                        16,
+                      ),
                       children: [
                         _overviewCard(vm),
                         const SizedBox(height: 12),
@@ -235,7 +244,12 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     ),
                   ),
                   Padding(
-                    padding: EdgeInsets.fromLTRB(16, 10, 16, 16 + safeBottom),
+                    padding: EdgeInsets.fromLTRB(
+                      modalHorizontalPadding,
+                      10,
+                      modalHorizontalPadding,
+                      16 + safeBottom,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -513,6 +527,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
     NailDimensionsV2 hand, {
     required bool showNfcTags,
   }) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+    final dimensionFontSize = isTablet ? 14.0 : 12.0;
     String value(String raw) {
       final trimmed = raw.trim();
       return trimmed.isEmpty || trimmed == '-' ? '-' : '$trimmed mm';
@@ -535,7 +551,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
       return Semantics(
         container: true,
         label:
-            '$title, $label, $spokenValue${showNfc ? ', NFC eligible' : ''}',
+            '$title, $label, $spokenValue${showNfc ? ', JNT Tap eligible' : ''}',
         child: ExcludeSemantics(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -551,9 +567,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.fade,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: AppColors.blackCat,
-                        fontSize: 12,
+                        fontSize: dimensionFontSize,
                         fontWeight: FontWeight.w500,
                         fontFamily: 'Arial',
                       ),
@@ -566,8 +582,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             const SizedBox(width: 10),
             Text(
               displayValue,
-              style: const TextStyle(
-                fontSize: 12,
+              style: TextStyle(
+                fontSize: dimensionFontSize,
                 fontWeight: FontWeight.w700,
                 fontFamily: 'ArialBold',
                 color: AppColors.blackCat,
@@ -591,9 +607,9 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
           child: Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
-              fontSize: 12,
+              fontSize: dimensionFontSize,
               fontFamily: 'ArialBold',
               color: AppColors.blackCat,
             ),
@@ -622,7 +638,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         border: Border.all(color: AppColors.blackCatBorderLight),
       ),
       child: const Text(
-        'NFC',
+        'JNT Tap',
         style: TextStyle(
           color: AppColors.blackCat,
           fontSize: 8.5,
@@ -744,6 +760,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
   }
 
   Widget _overviewNeedBudgetAcceptRow(_RequestDetailsVm vm) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
+    final overviewFontSize = isTablet ? 14.0 : 11.5;
     if (vm.isBrandRequest) {
       return Column(
         children: [
@@ -755,7 +773,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Need By',
                   value: vm.needByLabel,
                   center: true,
-                  fontSize: 11.5,
+                  fontSize: overviewFontSize,
                 ),
               ),
               if (vm.jntRevealDateLabel.trim().isNotEmpty) ...[
@@ -768,7 +786,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                     label: 'JNT Reveal',
                     value: vm.jntRevealDateLabel,
                     center: true,
-                    fontSize: 11.5,
+                    fontSize: overviewFontSize,
                   ),
                 ),
               ],
@@ -783,7 +801,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Budget',
                   value: vm.clientBudgetLabel,
                   center: true,
-                  fontSize: 11.5,
+                  fontSize: overviewFontSize,
                 ),
               ),
               const SizedBox(width: 12),
@@ -795,7 +813,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                   label: 'Accept By',
                   value: vm.requestAcceptByLabel,
                   center: true,
-                  fontSize: 11.5,
+                  fontSize: overviewFontSize,
                 ),
               ),
             ],
@@ -1548,7 +1566,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'NFC card tap',
+                            'JNT Tap',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
@@ -1973,7 +1991,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
         ),
       );
     }
-    Widget buildTile(String raw, {required double size}) {
+    Widget buildTile(String raw) {
       return FutureBuilder<String>(
         future: _resolveDisplayPath(raw),
         builder: (context, snap) {
@@ -1984,7 +2002,7 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
             future: precacheImage(imageProvider, context),
             builder: (context, imageSnap) {
               if (imageSnap.connectionState != ConnectionState.done) {
-                return SizedBox(width: size, height: size);
+                return const SizedBox.expand();
               }
               if (imageSnap.hasError) return const SizedBox.shrink();
               return ClipRRect(
@@ -2000,8 +2018,8 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       _showCampaignImagePreview(context, imageProvider);
                     },
                     child: Container(
-                      width: size,
-                      height: size,
+                      width: double.infinity,
+                      height: double.infinity,
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
@@ -2012,7 +2030,10 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
                       ),
                       child: Image(
                         image: imageProvider,
-                        fit: BoxFit.cover,
+                        // Inspiration images can be portrait, landscape or
+                        // square. Contain keeps the entire uploaded image
+                        // visible instead of cropping its edges.
+                        fit: BoxFit.contain,
                         errorBuilder: (_, _, _) => const SizedBox.shrink(),
                       ),
                     ),
@@ -2028,19 +2049,18 @@ class _ClientCampaignDetailsPageState extends State<ClientCampaignDetailsPage> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final tileSize = ((constraints.maxWidth - 24) / 4).clamp(72.0, 110.0);
+        final isTablet = isTabletSize(MediaQuery.sizeOf(context));
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: photos.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            mainAxisExtent: tileSize,
+            crossAxisCount: isTablet ? 3 : 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 4 / 3,
           ),
-          itemBuilder: (context, index) =>
-              buildTile(photos[index], size: tileSize),
+          itemBuilder: (context, index) => buildTile(photos[index]),
         );
       },
     );

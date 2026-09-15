@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../services/storage_url_resolver.dart';
 
 import '../widgets/company_shell_chrome.dart';
+import '../utlis/responsive_layout.dart';
 
 class BrandingCompanyHomePage extends StatelessWidget {
   const BrandingCompanyHomePage({
@@ -45,6 +46,7 @@ class BrandingCompanyHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = isTabletSize(MediaQuery.sizeOf(context));
     final looks = trendingArtists
         .expand((artist) {
           final photos = artist.previousProjects
@@ -79,9 +81,19 @@ class BrandingCompanyHomePage extends StatelessWidget {
         notificationFocusRequestKey: notificationFocusRequestKey,
       ),
 
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: isTablet ? 1200 : double.infinity,
+          ),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(
+              isTablet ? 24 : 16,
+              10,
+              isTablet ? 24 : 16,
+              16,
+            ),
+            children: [
           Row(
             children: [
               Expanded(
@@ -166,8 +178,8 @@ class BrandingCompanyHomePage extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: looks.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isTablet ? 4 : 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
                 childAspectRatio: 0.82,
@@ -179,7 +191,9 @@ class BrandingCompanyHomePage extends StatelessWidget {
                 total: looks.length,
               ),
             ),
-        ],
+            ],
+          ),
+        ),
       ),
     ));
   }
