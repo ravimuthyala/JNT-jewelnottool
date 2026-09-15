@@ -110,7 +110,7 @@ Future<void> showCompletedRequestSheet({
         ? const BoxConstraints(maxWidth: 1000)
         : null,
     backgroundColor: Colors.transparent,
-    builder: (_) => _CompletedRequestSheet(
+    builder: (_) => CompletedRequestSheetBody(
       request: request,
       shipDays: shipDays,
       onClose: onClose,
@@ -119,8 +119,8 @@ Future<void> showCompletedRequestSheet({
   );
 }
 
-class _CompletedRequestSheet extends StatefulWidget {
-  const _CompletedRequestSheet({
+class CompletedRequestSheetBody extends StatefulWidget {
+  const CompletedRequestSheetBody({
     required this.request,
     required this.shipDays,
     required this.onClose,
@@ -141,10 +141,11 @@ class _CompletedRequestSheet extends StatefulWidget {
   onMarkShipped;
 
   @override
-  State<_CompletedRequestSheet> createState() => _CompletedRequestSheetState();
+  State<CompletedRequestSheetBody> createState() =>
+      _CompletedRequestSheetState();
 }
 
-class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
+class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
   final SupabaseClient _supabase = Supabase.instance.client;
   // Flutter's iOS accessibility bridge doesn't reliably honor a proactively
   // *pushed* FocusSemanticEvent right after a TextField's keyboard closes --
@@ -554,7 +555,7 @@ class _CompletedRequestSheetState extends State<_CompletedRequestSheet> {
   }
 
   @override
-  void didUpdateWidget(covariant _CompletedRequestSheet oldWidget) {
+  void didUpdateWidget(covariant CompletedRequestSheetBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Rebuild when request data changes to ensure data is synced
     if (oldWidget.request != widget.request) {

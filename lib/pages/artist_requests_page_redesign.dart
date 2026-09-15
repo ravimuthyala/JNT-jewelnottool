@@ -4903,6 +4903,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       onClose: () {},
       onMarkCompleted: (completed, artistPhotos) async =>
           _handleMarkCompleted(r, completed, artistPhotos),
+      onMarkShipped: _buildMarkShippedHandler(r, hydrated),
     );
   }
 
@@ -5212,14 +5213,30 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
       onClose: () => Navigator.pop(context),
 
       // ✅ UPDATED signature + uses shippedDate
-      onMarkShipped:
-          ({
-            required GroupShippingMode mode,
-            required DateTime shippedDate,
-            String courier = '',
-            String tracking = '',
-            List<ShipmentRecipientEntry> recipients = const [],
-          }) async {
+      onMarkShipped: _buildMarkShippedHandler(r, hydrated),
+    );
+  }
+
+  // Shared by _openCompletedDetails and _openDesigningDetails (the latter
+  // reaches this once the artist confirms the completed set and the sheet
+  // swaps to the Shipping Label view in place -- see
+  // artist_accepted_request_sheet.dart's _showCompletedView) so both entry
+  // points mark shipped identically without duplicating this closure.
+  Future<void> Function({
+    required GroupShippingMode mode,
+    required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
+  })
+  _buildMarkShippedHandler(ClientRequestV2 r, ClientRequestV2 hydrated) {
+    return ({
+      required GroupShippingMode mode,
+      required DateTime shippedDate,
+      String courier = '',
+      String tracking = '',
+      List<ShipmentRecipientEntry> recipients = const [],
+    }) async {
             final isRespective = mode == GroupShippingMode.toRespectiveClient;
             // In "ship to each group member individually" mode, the
             // primary client's own shipment is the entry with no
@@ -5602,8 +5619,7 @@ class _ArtistRequestsPageRedesignState extends State<ArtistRequestsPageRedesign>
                 SnackBar(content: Text('Failed to mark request shipped: $e')),
               );
             }
-          },
-    );
+    };
   }
 
   Future<void> _openShippedDetails(ClientRequestV2 r) async {

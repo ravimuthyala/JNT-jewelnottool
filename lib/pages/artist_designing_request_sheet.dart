@@ -10,6 +10,14 @@ Future<void> showArtistDesigningRequestSheet({
   required VoidCallback onClose,
   required Future<void> Function(bool completed, List<String> artistPhotos)
   onMarkCompleted,
+  required Future<void> Function({
+    required GroupShippingMode mode,
+    required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
+  })
+  onMarkShipped,
 }) {
   // Uses the same full UI/sections as Accepted sheet, but in Designing mode.
   return showDesigningRequestSheet(
@@ -18,5 +26,6 @@ Future<void> showArtistDesigningRequestSheet({
     shipDays: shipDays,
     onClose: onClose,
     onMarkCompleted: onMarkCompleted,
+    onMarkShipped: onMarkShipped,
   );
 }

@@ -22,6 +22,7 @@ import '../widgets/request_modal_accessibility.dart';
 import '../utlis/responsive_layout.dart';
 import 'request_chat_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'artist_completed_request_sheet.dart' show CompletedRequestSheetBody;
 
 Future<void> showAcceptedRequestSheet({
   required BuildContext context,
@@ -44,6 +45,18 @@ Future<void> showAcceptedRequestSheet({
       request: request,
       shipDays: shipDays,
       mode: _AcceptedSheetMode.accepted,
+      // Mark-as-Completed is only ever rendered in designing mode (see
+      // _isDesigningMode gating in build()), so this handler is unreachable
+      // here -- accepted mode still reports completion the legacy way, via
+      // the popped result below.
+      onMarkCompleted: (_, _) async {},
+      onMarkShipped: ({
+        required GroupShippingMode mode,
+        required DateTime shippedDate,
+        String courier = '',
+        String tracking = '',
+        List<ShipmentRecipientEntry> recipients = const [],
+      }) async {},
     ),
   );
 
@@ -62,7 +75,26 @@ Future<void> showDesigningRequestSheet({
   required VoidCallback onClose,
   required Future<void> Function(bool completed, List<String> artistPhotos)
   onMarkCompleted,
+  required Future<void> Function({
+    required GroupShippingMode mode,
+    required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
+  })
+  onMarkShipped,
 }) async {
+  // Once the artist confirms the completed set from inside the sheet, it
+  // stays open and swaps to the Shipping Label view instead of popping --
+  // so completion is reported directly from there (see
+  // _AcceptedRequestSheetState._handleMarkCompleted). This flag makes the
+  // legacy post-pop reporting below a no-op once that's happened, since the
+  // only remaining pop once the sheet is showing the shipping view is
+  // _markShippedButton's unconditional Navigator.pop (in
+  // artist_completed_shipping_tab.dart), which resolves `result` to null
+  // and would otherwise silently re-report completed:false here.
+  var completionAlreadyReported = false;
+
   final result = await showModalBottomSheet<_AcceptedSheetResult>(
     context: context,
     useRootNavigator: true,
@@ -76,8 +108,15 @@ Future<void> showDesigningRequestSheet({
       request: request,
       shipDays: shipDays,
       mode: _AcceptedSheetMode.designing,
+      onMarkCompleted: (completed, artistPhotos) async {
+        completionAlreadyReported = true;
+        await onMarkCompleted(completed, artistPhotos);
+      },
+      onMarkShipped: onMarkShipped,
     ),
   );
+
+  if (completionAlreadyReported) return;
 
   // The request row is already updated inside _handleMarkCompleted().
   if (result?.completed == true) {
@@ -102,11 +141,32 @@ class _AcceptedRequestSheet extends StatefulWidget {
     required this.request,
     required this.shipDays,
     required this.mode,
+    required this.onMarkCompleted,
+    required this.onMarkShipped,
   });
 
   final ClientRequestV2 request;
   final int shipDays;
   final _AcceptedSheetMode mode;
+
+  // Called once, directly, right after the completed-set RPC succeeds (see
+  // _AcceptedRequestSheetState._handleMarkCompleted) -- the sheet stays open
+  // and swaps to the Shipping Label view rather than popping, so this can no
+  // longer be reported via the wrapper function's post-pop await.
+  final Future<void> Function(bool completed, List<String> artistPhotos)
+  onMarkCompleted;
+
+  // Forwarded straight to the swapped-in CompletedRequestSheetBody once
+  // _showCompletedView flips -- same contract as showCompletedRequestSheet's
+  // onMarkShipped.
+  final Future<void> Function({
+    required GroupShippingMode mode,
+    required DateTime shippedDate,
+    String courier,
+    String tracking,
+    List<ShipmentRecipientEntry> recipients,
+  })
+  onMarkShipped;
 
   @override
   State<_AcceptedRequestSheet> createState() => _AcceptedRequestSheetState();
@@ -115,6 +175,13 @@ class _AcceptedRequestSheet extends StatefulWidget {
 class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
   final SupabaseClient _supabase = Supabase.instance.client;
   final _picker = ImagePicker();
+
+  // Once the artist confirms the completed set, the sheet swaps in the
+  // existing Completed sheet's shipping UI in place of the designing-mode
+  // content below, instead of closing -- see _handleMarkCompleted() and the
+  // early return at the top of build().
+  bool _showCompletedView = false;
+  ClientRequestV2? _completedViewRequest;
   final FocusNode _closeFocusNode = FocusNode(
     debugLabel: 'acceptedRequestClose',
   );
@@ -603,6 +670,20 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
     });
   }
 
+  // Announced right before the sheet swaps from the designing-mode content
+  // to the swapped-in CompletedRequestSheetBody (see _handleMarkCompleted),
+  // so a screen-reader user is told the view changed before that widget's
+  // own initial-focus logic (a plain didChangeDependencies hook, unrelated
+  // to route-transition timing) settles focus on it.
+  void _announceCompletedViewSwap() {
+    if (!_accessibleNavigation(context)) return;
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      'Request marked as completed. Shipping label section ready.',
+      Directionality.of(context),
+    );
+  }
+
   String get _uploadPhotoCountSemantics {
     final count = _artistPhotos.length;
     if (count == 0) return 'No photos uploaded';
@@ -625,6 +706,15 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (_showCompletedView) {
+      return CompletedRequestSheetBody(
+        request: _completedViewRequest ?? widget.request,
+        shipDays: widget.shipDays,
+        onClose: () => Navigator.pop(context),
+        onMarkShipped: widget.onMarkShipped,
+      );
+    }
+
     final maxH = MediaQuery.of(context).size.height * 0.92;
     final isTablet = isTabletSize(MediaQuery.sizeOf(context));
 
@@ -883,6 +973,49 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                   onChanged: (value) => setState(
                                     () => _consentToPublishFinishedPhotos =
                                         value,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                SizedBox(
+                                  height: 48,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.blackCat,
+                                      foregroundColor: AppColors.snow,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    onPressed:
+                                        (_markingCompleted ||
+                                            _artistPhotos.isEmpty)
+                                        ? null
+                                        : _handleMarkCompleted,
+                                    child: _markingCompleted
+                                        ? Semantics(
+                                            liveRegion: true,
+                                            label:
+                                                'Marking request as completed',
+                                            child: const ExcludeSemantics(
+                                              child: SizedBox(
+                                                height: 18,
+                                                width: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
+                                              ),
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Confirm Completed Set',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                              fontFamily: 'Arial',
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ],
@@ -1397,15 +1530,27 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop(
-        _AcceptedSheetResult(
-          completed: true,
-          artistPhotos: uploadedArtistPhotos,
-        ),
-      );
 
-      // Run non-critical side effects after closing the sheet so UI is not blocked.
+      // Run non-critical side effects in the background -- the sheet no
+      // longer closes at this point (see below), but these still shouldn't
+      // block the UI.
       unawaited(_runPostCompleteSideEffects(uploadedArtistPhotos));
+
+      // Report completion directly instead of via the popped-result path,
+      // since the sheet stays open and swaps to the Shipping Label view
+      // below rather than closing -- see showDesigningRequestSheet's
+      // completionAlreadyReported guard.
+      await widget.onMarkCompleted(true, uploadedArtistPhotos);
+      if (!mounted) return;
+
+      _announceCompletedViewSwap();
+      setState(() {
+        _completedViewRequest = widget.request.copyWith(
+          status: RequestStatusV2.completed,
+          artistImages: uploadedArtistPhotos,
+        );
+        _showCompletedView = true;
+      });
     } catch (e, st) {
       debugPrint('MARK COMPLETED FAILED: $e');
       debugPrintStack(stackTrace: st);
