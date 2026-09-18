@@ -53,6 +53,12 @@ app.*.map.json
 /android/app/*.jks
 /android/app/*.keystore
 
+# --dart-define-from-file inputs (nail/full-hand measurement API keys, etc.)
+# -- never commit real keys; env/example.json is a template with empty
+# placeholders only, see docs/PLAYSTORE_API_COST_PRECAUTIONS.md.
+env/*.json
+!env/example.json
+
 device-logcat.txt
 
 # Graphify knowledge graph output

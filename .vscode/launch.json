@@ -2,39 +2,46 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    //
+    // ENV/ENABLE_*/measurement API keys are no longer passed inline here --
+    // they live in env/<flavor>.json (gitignored; copy env/example.json to
+    // get started) and are loaded via --dart-define-from-file. See
+    // docs/PLAYSTORE_API_COST_PRECAUTIONS.md for why: the old inline
+    // --dart-define=...API_KEY=<key> put the (now-compromised) key in
+    // plaintext in this tracked file.
     "version": "0.2.0",
     "configurations": [
         {
             "name": "JewelNotTool (dev)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "dev", "--dart-define=ENV=dev", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
+            "args": ["--flavor", "dev", "--dart-define-from-file=env/dev.json"]
         },
         {
             "name": "JewelNotTool (uat)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "uat", "--dart-define=ENV=uat", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
+            "args": ["--flavor", "uat", "--dart-define-from-file=env/uat.json"]
         },
         {
             "name": "JewelNotTool (production)",
             "request": "launch",
             "type": "dart",
-            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
+            "args": ["--flavor", "production", "--dart-define-from-file=env/production.json"]
         },
         {
             "name": "JewelNotTool (production, profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile",
-            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
+            "args": ["--flavor", "production", "--dart-define-from-file=env/production.json"]
         },
         {
             "name": "JewelNotTool (production, release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release",
-            "args": ["--flavor", "production", "--dart-define=ENV=production", "--dart-define=ENABLE_NAIL_MEASUREMENT_API=true", "--dart-define=ENABLE_FULL_HAND_MEASUREMENT_API=true", "--dart-define=NAIL_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU", "--dart-define=FULL_HAND_MEASUREMENT_API_KEY=HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU"]
+            "args": ["--flavor", "production", "--dart-define-from-file=env/production.json"]
         }
     ]
 }

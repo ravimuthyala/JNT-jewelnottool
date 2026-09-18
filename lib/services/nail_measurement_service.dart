@@ -9,12 +9,17 @@ class NailMeasurementService {
     defaultValue:
         'https://uolyyyq9ih.execute-api.us-east-2.amazonaws.com/measure/single-finger',
   );
-  // ponytail: hardcoded test-only default so plain `flutter run` works
-  // without flags. MUST be overridden via --dart-define-from-file for any
-  // real release build — see docs/PLAYSTORE_API_COST_PRECAUTIONS.md.
+  // No hardcoded default -- the old test key leaked into source control and
+  // must be treated as compromised (see docs/PLAYSTORE_API_COST_PRECAUTIONS.md).
+  // Supply a real key via --dart-define-from-file (env/*.json, gitignored;
+  // see env/example.json). Without one, _apiKey is empty and isConfigured
+  // stays true but every request goes out with no x-api-key header, so the
+  // API rejects it (401/403) instead of silently authenticating with a
+  // leaked credential -- fails loudly in the response/logs rather than
+  // quietly working on a key nobody chose to ship.
   static const String _apiKey = String.fromEnvironment(
     'NAIL_MEASUREMENT_API_KEY',
-    defaultValue: 'HOGfjqLWN1I8UX5P8lB_V5tir3uqMR-B3vdHI21tXQU',
+    defaultValue: '',
   );
   static const bool _enabled = bool.fromEnvironment(
     'ENABLE_NAIL_MEASUREMENT_API',

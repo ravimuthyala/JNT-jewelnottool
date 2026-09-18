@@ -1,31 +1,40 @@
 # Nail Measurement API — Play Store Release Precautions
 
 The nail measurement feature (`NailMeasurementService`, `FullHandMeasurementService`)
-calls an AWS API Gateway + Lambda endpoint that costs money per invocation
-(compute time + API Gateway requests). Right now, for local dev convenience,
-the API key and `ENABLE_*` flags are **hardcoded as `defaultValue`s** in:
+calls a third-party (AWS-hosted, vendor-operated) API Gateway + Lambda
+endpoint that costs money per invocation (compute time + API Gateway
+requests). It is not part of JNT's own AWS account/infrastructure — treat it
+as an external vendor relationship, the same as Stripe or Shippo.
 
-- `lib/services/nail_measurement_service.dart`
-- `lib/services/full_hand_measurement_service.dart`
-
-so plain `flutter run` works without typing `--dart-define` flags every time.
-**This is a test-only shortcut and must not ship to the Play Store as-is.**
+**Update:** the API key and `ENABLE_*` flags used to be **hardcoded as
+`defaultValue`s** directly in source (`lib/services/nail_measurement_service.dart`,
+`lib/services/full_hand_measurement_service.dart`) and duplicated in
+`.vscode/launch.json`, so plain `flutter run` worked without typing
+`--dart-define` flags. That leaked a real key into source control. This has
+been fixed: those `defaultValue`s are now empty strings, and all configuration
+(including the key) is supplied via `--dart-define-from-file` pointing at a
+gitignored `env/<flavor>.json` file — see `env/example.json` for the
+template. **The one thing this fix could NOT do** is invalidate the old key
+itself — that still requires the vendor (see step 1 below).
 
 ## Before building the real release (`flutter build appbundle`)
 
-1. **Rotate the API key.** The key currently hardcoded in source
-   (`HOGfjqLWN1I8...`) has been sitting in a dev machine's shell history,
-   `.vscode/launch.json`, and now the Dart source itself. Generate a new one
-   in API Gateway before the first public release and update it everywhere
-   at once (server usage plan + client defines).
+1. **Rotate the API key — STILL PENDING, requires the vendor.** The old key
+   (`HOGfjqLWN1I8...`) was sitting in a dev machine's shell history,
+   `.vscode/launch.json`, and the Dart source itself — all committed to this
+   repo's history — so it must be treated as compromised regardless of the
+   code fix above. Contact the vendor operating this measurement API and
+   request a new key (and confirm a request quota/rate limit is set on it —
+   see the cost-control section below). This is not something that can be
+   done from this codebase alone.
 
-2. **Move the key out of hardcoded `defaultValue`s.** Use
-   `--dart-define-from-file` with a gitignored JSON file instead of typing
-   `--dart-define=...=<key>` (which leaks into shell history) or leaving it
-   as a compiled-in default:
+2. **Move the key out of hardcoded `defaultValue`s — DONE.** Configuration
+   now comes from `--dart-define-from-file` with a gitignored per-flavor
+   JSON file instead of an inline `--dart-define=...=<key>` (which leaks
+   into shell history) or a compiled-in default:
 
    ```json
-   // env/production.json  (add to .gitignore, never commit)
+   // env/production.json  (gitignored -- copy env/example.json to create it)
    {
      "ENV": "production",
      "ENABLE_NAIL_MEASUREMENT_API": true,
@@ -38,6 +47,13 @@ so plain `flutter run` works without typing `--dart-define` flags every time.
    ```bash
    flutter build appbundle --dart-define-from-file=env/production.json
    ```
+
+   `.vscode/launch.json`'s dev/uat/production configurations already do this
+   (`--dart-define-from-file=env/<flavor>.json`) instead of inline
+   `--dart-define=...API_KEY=...`. Once the key is rotated (step 1), paste
+   the new value into your local `env/dev.json` / `env/uat.json` /
+   `env/production.json` — those files are gitignored, so this never touches
+   source control again.
 
 3. **Understand `--dart-define` is not a secret vault.** Whatever value you
    pass — file-based or hardcoded — ends up as a plain compiled constant in
@@ -76,9 +92,16 @@ volume they want — you pay for all of it.
 
 ## Checklist before submitting to Play Console
 
-- [ ] API key rotated from the one used during development
-- [ ] Key supplied via `--dart-define-from-file` with a gitignored file, not
-      committed anywhere (source, `launch.json`, or this repo's history)
-- [ ] API Gateway usage plan has a `Quota` and `RateLimit` set
+- [ ] API key rotated from the one used during development — **pending,
+      requires the vendor**
+- [x] Key supplied via `--dart-define-from-file` with a gitignored file, not
+      committed anywhere (source, `launch.json`, or this repo's history) —
+      done; hardcoded `defaultValue`s removed from both services, inline
+      `--dart-define=...API_KEY=...` removed from `.vscode/launch.json`,
+      `env/*.json` gitignored with `env/example.json` committed as a template
+- [ ] API Gateway usage plan has a `Quota` and `RateLimit` set — pending,
+      requires the vendor
 - [ ] CloudWatch alarm configured for request-count/error spikes on this API
-- [ ] Confirmed debug endpoints aren't reachable from the production client build
+      — pending, requires the vendor
+- [ ] Confirmed debug endpoints aren't reachable from the production client
+      build
