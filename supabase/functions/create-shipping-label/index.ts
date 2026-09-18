@@ -29,6 +29,10 @@
 // interface RequestBody {
 //   requestId: string;
 //   sourceCollection: string; // 'Client_Custom_Requests' | 'Company_Custom_Requests'
+//   carrier?: string; // 'USPS' | 'UPS' | 'FedEx' | 'DHL' -- artist's choice from
+//                      // the Courier dropdown in artist_completed_request_sheet.dart;
+//                      // falls back to the cheapest available rate if omitted/unmatched.
+//   recipientKey?: string; // group orders shipping to each member individually
 // }
 //
 // interface ShippoAddress {
@@ -43,7 +47,7 @@
 //
 // Deno.serve(async (req) => {
 //   try {
-//     const { requestId, sourceCollection }: RequestBody = await req.json();
+//     const { requestId, sourceCollection, carrier }: RequestBody = await req.json();
 //     if (!requestId) {
 //       return new Response(JSON.stringify({ error: 'requestId is required' }), {
 //         status: 400,
@@ -135,7 +139,14 @@
 //       }),
 //     });
 //     const shipment = await shipmentRes.json();
-//     const rate = shipment.rates?.[0];
+//     const rates: Array<{ provider: string }> = shipment.rates ?? [];
+//     // Prefer a rate from the artist-selected carrier (Shippo's `provider`
+//     // is a prefix match, e.g. 'USPS' matches 'USPS Priority Mail', 'DHL'
+//     // matches 'DHL Express'); fall back to the cheapest available rate if
+//     // no carrier was given or none of its rates came back for this route.
+//     const rate = (carrier
+//       ? rates.find((r) => r.provider?.toUpperCase().startsWith(carrier.toUpperCase()))
+//       : undefined) ?? rates[0];
 //     if (!rate) {
 //       return new Response(JSON.stringify({ error: 'No shipping rate available' }), {
 //         status: 502,

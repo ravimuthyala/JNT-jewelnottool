@@ -269,6 +269,19 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
   final GlobalKey _courierSemanticsKey = GlobalKey(
     debugLabel: 'completedShippingCourierSemantics',
   );
+  // Distinct FocusNode/GlobalKey from the pair above -- this field renders
+  // in the Shipping Label section (choosing the carrier a label gets
+  // purchased for) at the same time as the "Shipped by" field above renders
+  // in the Shipping Details section (self-reported courier when marking
+  // shipped); both read/write the same _courier value, but each needs its
+  // own GlobalKey since Flutter throws if two simultaneously-mounted
+  // widgets share one.
+  final FocusNode _labelCourierFocusNode = FocusNode(
+    debugLabel: 'completedShippingLabelCourier',
+  );
+  final GlobalKey _labelCourierSemanticsKey = GlobalKey(
+    debugLabel: 'completedShippingLabelCourierSemantics',
+  );
   final FocusNode _trackingFocusNode = FocusNode(
     debugLabel: 'completedShippingTracking',
   );
@@ -290,6 +303,14 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
   final Map<String, TextEditingController> _recipientTrackingCtrls = {};
   final Map<String, FocusNode> _recipientCourierFocusNodes = {};
   final Map<String, GlobalKey> _recipientCourierSemanticsKeys = {};
+  // Separate from the pair above for the same reason as
+  // _labelCourierFocusNode/_labelCourierSemanticsKey: the per-recipient
+  // courier field in the Shipping Label section (_recipientLabelCard) and
+  // the one in Shipping Details (_recipientShipmentCard, "Shipped by")
+  // render for the same recipient at the same time in respective-shipping
+  // mode, and both read/write the same _recipientCouriers[key] value.
+  final Map<String, FocusNode> _recipientLabelCourierFocusNodes = {};
+  final Map<String, GlobalKey> _recipientLabelCourierSemanticsKeys = {};
   final Map<String, FocusNode> _recipientTrackingFocusNodes = {};
   final Map<String, GlobalKey> _recipientTrackingSemanticsKeys = {};
 
@@ -353,6 +374,27 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
     return _recipientCourierSemanticsKeys.putIfAbsent(
       key,
       () => GlobalKey(debugLabel: 'completedShippingCourierSemantics-$key'),
+    );
+  }
+
+  // No 'self' special-case here (unlike _courierFocusNodeFor above): that
+  // shortcut reuses the plain single-flow _courierFocusNode/_courierSemanticsKey,
+  // which _recipientCourierField already claims for 'self' whenever this
+  // renders (both are only ever shown together in respective-shipping mode).
+  // Always going through the map keeps every recipient's label-section
+  // courier field on its own node/key, 'self' included.
+  FocusNode _labelCourierFocusNodeFor(String key) {
+    return _recipientLabelCourierFocusNodes.putIfAbsent(
+      key,
+      () => FocusNode(debugLabel: 'completedShippingLabelCourier-$key'),
+    );
+  }
+
+  GlobalKey _labelCourierSemanticsKeyFor(String key) {
+    return _recipientLabelCourierSemanticsKeys.putIfAbsent(
+      key,
+      () =>
+          GlobalKey(debugLabel: 'completedShippingLabelCourierSemantics-$key'),
     );
   }
 
@@ -459,6 +501,9 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
     if (prefillTracking.isNotEmpty) {
       _trackingCtrl.text = prefillTracking;
     }
+    // No default carrier -- the field starts on "Select one" and the artist
+    // must explicitly choose before a label can be requested. Only exception
+    // is prefilling from a carrier a label already exists for.
     if (prefillCourier.isNotEmpty && _couriers.contains(prefillCourier)) {
       _courier = prefillCourier;
     }
@@ -495,9 +540,13 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
       ctrl.dispose();
     }
     _courierFocusNode.dispose();
+    _labelCourierFocusNode.dispose();
     _trackingFocusNode.dispose();
     _shippedDateFocusNode.dispose();
     for (final node in _recipientCourierFocusNodes.values) {
+      node.dispose();
+    }
+    for (final node in _recipientLabelCourierFocusNodes.values) {
       node.dispose();
     }
     for (final node in _recipientTrackingFocusNodes.values) {
@@ -580,6 +629,14 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
       }
     }
     return true;
+  }
+
+  bool get _hasCourierSelected =>
+      _courier != null && _couriers.contains(_courier);
+
+  bool _hasRecipientCourierSelected(String key) {
+    final courier = _recipientCouriers[key];
+    return courier != null && _couriers.contains(courier);
   }
 
   bool get _isShippingLabelReady {
@@ -779,6 +836,7 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
         // await _supabase.functions.invoke('create-shipping-label', body: {
         //   'requestId': widget.request.id,
         //   'sourceCollection': widget.request.sourceCollection,
+        //   'carrier': _courier,
         // });
       } else {
         await _simulateGenerateShippingLabel();
@@ -796,9 +854,7 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
   /// will write for real.
   Future<void> _simulateGenerateShippingLabel() async {
     final now = DateTime.now();
-    final carrier = _dbShippingLabelCarrier.isNotEmpty
-        ? _dbShippingLabelCarrier
-        : (_couriers.contains(_courier) ? _courier! : _couriers.first);
+    final carrier = _hasCourierSelected ? _courier! : _couriers.first;
     final tracking = _simulatedTrackingNumberFor(carrier, now);
     await _supabase
         .from(_requestTable)
@@ -854,6 +910,7 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
         //   'requestId': widget.request.id,
         //   'sourceCollection': widget.request.sourceCollection,
         //   'recipientKey': recipient.key,
+        //   'carrier': _recipientCouriers[recipient.key],
         // });
       } else {
         await _simulateGenerateShippingLabelForRecipient(recipient);
@@ -871,9 +928,12 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
   ) async {
     final now = DateTime.now();
     final existingCarrier = _recipientLabelCarrier(recipient.key);
+    final selectedCarrier = _recipientCouriers[recipient.key];
     final carrier = existingCarrier.isNotEmpty
         ? existingCarrier
-        : _couriers.first;
+        : (selectedCarrier != null && _couriers.contains(selectedCarrier)
+              ? selectedCarrier
+              : _couriers.first);
     final tracking = _simulatedTrackingNumberFor(
       carrier,
       now,
@@ -1878,21 +1938,32 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
     required String hint,
     required IconData icon,
     required VoidCallback onPressed,
+    bool enabled = true,
+    String? disabledHint,
   }) {
     return Semantics(
       button: true,
+      enabled: enabled,
       label: label,
-      hint: hint,
-      onTap: onPressed,
+      hint: enabled ? hint : (disabledHint ?? hint),
+      onTap: enabled ? onPressed : null,
       child: ExcludeSemantics(
         child: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            backgroundColor: AppColors.blackCat,
-            foregroundColor: AppColors.snow,
-            side: const BorderSide(color: AppColors.blackCat),
+            backgroundColor: enabled
+                ? AppColors.blackCat
+                : AppColors.blackCat.withValues(alpha: 0.18),
+            foregroundColor: enabled
+                ? AppColors.snow
+                : AppColors.snow.withValues(alpha: 0.78),
+            side: BorderSide(
+              color: enabled
+                  ? AppColors.blackCat
+                  : AppColors.blackCat.withValues(alpha: 0.18),
+            ),
             shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           ),
-          onPressed: onPressed,
+          onPressed: enabled ? onPressed : null,
           icon: Icon(icon, size: 16),
           label: Text(label),
         ),
@@ -1949,16 +2020,20 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
             ),
           ),
           const SizedBox(height: 10),
+          _fieldSectionLabel('Courier'),
+          const SizedBox(height: 8),
+          _labelCourierField(context),
+          const SizedBox(height: 12),
           _shippingActionButton(
             label: kShippingLiveEnabled
                 ? 'Get Shipping Label'
                 : 'Get Shipping Label (Simulated)',
             hint:
                 'Double tap to generate a shipping label and tracking number for this order',
+            disabledHint: 'Select a courier first',
             icon: Icons.local_shipping_rounded,
-            onPressed: _generatingShippingLabel
-                ? () {}
-                : () => unawaited(_getShippingLabel()),
+            enabled: _hasCourierSelected && !_generatingShippingLabel,
+            onPressed: () => unawaited(_getShippingLabel()),
           ),
         ],
         if (_isShippingLabelReady) ...[
@@ -2144,18 +2219,29 @@ class _CompletedRequestSheetState extends State<CompletedRequestSheetBody> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  Text(
+                    'Courier',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: AppColors.blackCat.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  _recipientLabelCourierField(context, recipient),
+                  const SizedBox(height: 10),
                   _shippingActionButton(
                     label: kShippingLiveEnabled
                         ? 'Get Shipping Label'
                         : 'Get Shipping Label (Simulated)',
                     hint:
                         'Double tap to generate a shipping label and tracking number for ${recipient.name}',
+                    disabledHint: 'Select a courier first',
                     icon: Icons.local_shipping_rounded,
-                    onPressed: generating
-                        ? () {}
-                        : () => unawaited(
-                            _getShippingLabelForRecipient(recipient),
-                          ),
+                    enabled:
+                        _hasRecipientCourierSelected(recipient.key) &&
+                        !generating,
+                    onPressed: () =>
+                        unawaited(_getShippingLabelForRecipient(recipient)),
                   ),
                 ],
               ],

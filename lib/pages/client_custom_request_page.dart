@@ -1504,7 +1504,7 @@ class _ClientCustomRequestPageState extends State<ClientCustomRequestPage> {
       now.year,
       now.month,
       now.day,
-    ).add(const Duration(days: 4));
+    ).add(const Duration(days: 7));
     final initialSelectedDate =
         _needBy != null && !_needBy!.isBefore(firstEnabledDate)
         ? _needBy!

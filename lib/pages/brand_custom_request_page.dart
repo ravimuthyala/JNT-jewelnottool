@@ -955,7 +955,7 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
       now.year,
       now.month,
       now.day,
-    ).add(const Duration(days: 7));
+    ).add(const Duration(days: 9));
     final initialDate = _needBy != null && !_needBy!.isBefore(minDate)
         ? _needBy!
         : minDate;
@@ -2194,11 +2194,12 @@ class _BrandCustomRequestPageState extends State<BrandCustomRequestPage> {
           ? plannedInspirationPhotos.first
           : '';
       final orderNumber = _generateBrandOrderNumber(requestId);
+      final submittedAt = DateTime.now();
       final requestAcceptBy = DateTime(
-        _needBy!.year,
-        _needBy!.month,
-        _needBy!.day,
-      ).subtract(const Duration(days: 5));
+        submittedAt.year,
+        submittedAt.month,
+        submittedAt.day,
+      ).add(const Duration(days: 2));
       final requestAcceptByDisplay =
           '${requestAcceptBy.month.toString().padLeft(2, '0')}/${requestAcceptBy.day.toString().padLeft(2, '0')}/${requestAcceptBy.year}';
 

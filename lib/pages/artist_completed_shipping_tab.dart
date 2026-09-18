@@ -258,6 +258,73 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
     );
   }
 
+  /// Same field/value as _courierField (both read/write _courier so the
+  /// carrier a label gets purchased for and the "Shipped by" self-report
+  /// stay in sync) but with its own FocusNode/GlobalKey and accessible
+  /// label, since this renders in the Shipping Label section at the same
+  /// time _courierField renders in Shipping Details -- two mounted widgets
+  /// can never share one GlobalKey, and a screen reader needs distinct
+  /// names for the two "Courier" controls on screen. Visible text still
+  /// starts with "Courier" (WCAG 2.5.3 Label in Name) even though the
+  /// accessible label adds context.
+  Widget _labelCourierField(BuildContext context) {
+    final fieldKey = _labelCourierSemanticsKey;
+    final displayText = (_courier ?? '').trim();
+    final hasValue = displayText.isNotEmpty;
+
+    return Focus(
+      focusNode: _labelCourierFocusNode,
+      child: Semantics(
+        key: fieldKey,
+        button: true,
+        label: 'Courier for shipping label',
+        value: hasValue ? displayText : 'Not selected',
+        hint: 'Double tap to open the courier list',
+        onTap: () => _openCourierMenu(context, _labelCourierFocusNode, fieldKey),
+        onDidGainAccessibilityFocus: _handleTrackingRefocusTrapFocused,
+        child: ExcludeSemantics(
+          child: InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: () =>
+                _openCourierMenu(context, _labelCourierFocusNode, fieldKey),
+            child: Container(
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasValue ? displayText : 'Select courier',
+                      style: TextStyle(
+                        color: hasValue
+                            ? AppColors.blackCat
+                            : AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
+                    size: 24,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _recipientCourierField(
     BuildContext context,
     _ShipmentRecipient recipient,
@@ -321,7 +388,7 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                   children: [
                     Expanded(
                       child: Text(
-                        hasValue ? displayText : 'Select courier',
+                        hasValue ? displayText : 'Select one',
                         style: TextStyle(
                           color: hasValue
                               ? AppColors.blackCat
@@ -338,6 +405,86 @@ extension _CompletedRequestShippingTab on _CompletedRequestSheetState {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Same value/behavior as _recipientCourierField (both read/write
+  /// _recipientCouriers[recipient.key]) but its own FocusNode/GlobalKey and
+  /// accessible label -- this renders in the Shipping Label section
+  /// (_recipientLabelCard) at the same time _recipientCourierField renders
+  /// in Shipping Details (_recipientShipmentCard) for respective-shipping
+  /// group orders, and two mounted widgets can't share a GlobalKey.
+  Widget _recipientLabelCourierField(
+    BuildContext context,
+    _ShipmentRecipient recipient,
+  ) {
+    final focusNode = _labelCourierFocusNodeFor(recipient.key);
+    final fieldKey = _labelCourierSemanticsKeyFor(recipient.key);
+    final displayText = (_recipientCouriers[recipient.key] ?? '').trim();
+    final hasValue = displayText.isNotEmpty;
+
+    return Focus(
+      focusNode: focusNode,
+      child: Semantics(
+        key: fieldKey,
+        button: true,
+        label: '${recipient.name} courier for shipping label',
+        value: hasValue ? displayText : 'Not selected',
+        hint: 'Double tap to open the courier list',
+        onTap: () => _openCourierMenuFor(
+          context,
+          focusNode,
+          fieldKey,
+          _recipientCouriers[recipient.key],
+          (value) => setState(() => _recipientCouriers[recipient.key] = value),
+        ),
+        onDidGainAccessibilityFocus: _handleTrackingRefocusTrapFocused,
+        child: ExcludeSemantics(
+          child: InkWell(
+            borderRadius: BorderRadius.zero,
+            onTap: () => _openCourierMenuFor(
+              context,
+              focusNode,
+              fieldKey,
+              _recipientCouriers[recipient.key],
+              (value) =>
+                  setState(() => _recipientCouriers[recipient.key] = value),
+            ),
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: AppColors.snow,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(
+                  color: AppColors.blackCat.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      hasValue ? displayText : 'Select one',
+                      style: TextStyle(
+                        color: hasValue
+                            ? AppColors.blackCat
+                            : AppColors.blackCat.withValues(alpha: 0.60),
+                        fontWeight: FontWeight.w400,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: AppColors.blackCat.withValues(alpha: 0.72),
+                    size: 20,
+                  ),
+                ],
               ),
             ),
           ),
