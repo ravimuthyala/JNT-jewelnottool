@@ -419,15 +419,10 @@ enabled = true
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
-[functions.ai-chat-assistant]
-# Invoked only via the internal Postgres trigger (pg_net), which cannot
-# present a Supabase auth JWT. Authenticity is instead checked via the
-# x-webhook-secret header against the AI_ASSISTANT_WEBHOOK_SECRET secret.
-verify_jwt = false
-
 # Not deployed yet -- see supabase/functions/shippo-webhook/index.ts header
 # for activation steps. Uncomment once that function is deployed: Shippo
-# calls this endpoint directly and cannot present a Supabase auth JWT,
-# same as ai-chat-assistant above.
+# calls this endpoint directly and cannot present a Supabase auth JWT, so
+# verify_jwt must be off for it, same as any other pg_net/third-party
+# webhook target.
 # [functions.shippo-webhook]
 # verify_jwt = false

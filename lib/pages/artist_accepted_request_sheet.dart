@@ -1068,30 +1068,13 @@ class _AcceptedRequestSheetState extends State<_AcceptedRequestSheet> {
                                 // let the artist pick which recipient to
                                 // chat with -- each gets their own thread,
                                 // instead of only reaching the primary
-                                // client (or, for brand orders, only AI
-                                // support).
+                                // client.
                                 final isGroupOrder =
                                     widget.request.orderType ==
                                         RequestOrderTypeV2.group ||
                                     widget.request.groupClients.isNotEmpty;
                                 if (isGroupOrder) {
                                   _openGroupClientChatPicker(context);
-                                  return;
-                                }
-
-                                // Brand-submitted single-client requests
-                                // always talk to the JNT AI Assistant, never
-                                // directly with the artist.
-                                if (_isBrandRequest(widget.request)) {
-                                  showRequestChatModal(
-                                    context: context,
-                                    requestId: widget.request.id,
-                                    conversationSuffix: 'ai_support',
-                                    clientEmail: widget.request.clientEmail,
-                                    artistEmail: 'ai.chatbot@jnt.com',
-                                    clientName: widget.request.clientName,
-                                    artistName: 'JNT AI Assistant',
-                                  );
                                   return;
                                 }
 

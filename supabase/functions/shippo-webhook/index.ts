@@ -12,13 +12,11 @@
 // function's header for the activation steps.
 //
 // Unlike Stripe, Shippo does not HMAC-sign its webhook payloads, so this
-// endpoint authenticates the same way ai-chat-assistant does: a shared
-// secret compared against a header. Add the matching
-// `[functions.shippo-webhook]` / `verify_jwt = false` block to
-// supabase/config.toml when deploying (see ai-chat-assistant's entry there
-// for the pattern), and register this function's URL + a `?secret=...`
-// (or header, depending on what Shippo's webhook config supports) in the
-// Shippo dashboard.
+// endpoint authenticates via a shared secret compared against a header. Add
+// the matching `[functions.shippo-webhook]` / `verify_jwt = false` block to
+// supabase/config.toml when deploying, and register this function's URL +
+// a `?secret=...` (or header, depending on what Shippo's webhook config
+// supports) in the Shippo dashboard.
 //
 // Deploy: supabase functions deploy shippo-webhook --project-ref <ref>
 // Secrets: supabase secrets set SHIPPO_WEBHOOK_SECRET=<random-string> --project-ref <ref>

@@ -2691,12 +2691,6 @@ class _BaseOrderDetails extends StatelessWidget {
   }
 
   void _openRequestChat(BuildContext context) {
-    // Brand-submitted requests always talk to the JNT AI Assistant, never
-    // directly with the accepted artist.
-    if (_isBrandRequest) {
-      _openAiSupportChat(context);
-      return;
-    }
     final clientEmail = order.clientEmail.trim().toLowerCase();
     final artistEmail = order.acceptedByArtistEmail.trim().toLowerCase();
     if (clientEmail.isEmpty || artistEmail.isEmpty) {
@@ -2725,34 +2719,6 @@ class _BaseOrderDetails extends StatelessWidget {
       artistEmail: artistEmail,
       clientName: clientName,
       artistName: order.artistName.trim(),
-    );
-  }
-
-  void _openAiSupportChat(BuildContext context) {
-    final clientEmail = order.clientEmail.trim().toLowerCase();
-    if (clientEmail.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chat unavailable for this order.')),
-      );
-      return;
-    }
-    final currentName = (AppAuth.instance.currentUser?.displayName ?? '')
-        .trim();
-    final fallbackCurrentName = (AppAuth.instance.currentUser?.email ?? '')
-        .trim();
-    final clientName = currentName.isNotEmpty
-        ? currentName
-        : (fallbackCurrentName.contains('@')
-              ? fallbackCurrentName.split('@').first
-              : 'Client');
-    showRequestChatModal(
-      context: context,
-      requestId: order.id,
-      conversationSuffix: 'ai_support',
-      clientEmail: clientEmail,
-      artistEmail: 'ai.chatbot@jnt.com',
-      clientName: clientName,
-      artistName: 'JNT AI Assistant',
     );
   }
 
@@ -3351,13 +3317,13 @@ class _BaseOrderDetails extends StatelessWidget {
                       ),
                       onPressed: () {
                         if (isCancelledStatus) {
-                          (onCancelledChat ?? () => _openAiSupportChat(context))
+                          (onCancelledChat ?? () => _openRequestChat(context))
                               .call();
                           return;
                         }
                         (onExpiredChat ??
                                 onCancelledChat ??
-                                () => _openAiSupportChat(context))
+                                () => _openRequestChat(context))
                             .call();
                       },
                       child: const Text(

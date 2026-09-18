@@ -7,7 +7,6 @@ class RequestChatService {
   RequestChatService._();
 
   static final SupabaseClient _supabase = Supabase.instance.client;
-  static const String _aiAssistantEmail = 'ai.chatbot@jnt.com';
 
   static String normalizeEmail(String value) => value.trim().toLowerCase();
 
@@ -50,15 +49,6 @@ class RequestChatService {
       await _supabase
           .from('request_chats')
           .upsert(roomPayload, onConflict: 'id');
-
-      if (normalizedArtist == _aiAssistantEmail) {
-        await _ensureAiAssistantWelcomeMessage(
-          conversationId: conversationId,
-          requestId: requestId,
-          clientEmail: normalizedClient,
-          clientName: clientName,
-        );
-      }
     } catch (e, st) {
       debugPrint('RequestChatService.ensureConversation failed: $e');
       debugPrint(st.toString());
@@ -235,75 +225,6 @@ class RequestChatService {
       debugPrint('RequestChatService._sendMessageCore failed: $e');
       debugPrint(st.toString());
     }
-  }
-
-  static Future<void> _ensureAiAssistantWelcomeMessage({
-    required String conversationId,
-    required String requestId,
-    required String clientEmail,
-    required String clientName,
-  }) async {
-    final existing = await _supabase
-        .from('request_chat_messages')
-        .select('id')
-        .eq('conversation_id', conversationId)
-        .limit(1);
-
-    if (existing.isNotEmpty) return;
-
-    final greetingName = clientName.trim().isEmpty ? 'there' : clientName.trim();
-    final welcomeText =
-        'Hi $greetingName, welcome to JNT. I’m your JNT Assistant.\n'
-        'I can help you with order status, payment updates, delivery updates, reviews, tips, and support questions.\n'
-        'Please choose one:\n\n'
-        '1. Check my order status\n'
-        '2. Payment help\n'
-        '3. Shipping or delivery update\n'
-        '4. Leave a review\n'
-        '5. Add a tip\n'
-        '6. Contact support';
-
-    final now = DateTime.now();
-    final nowIso = now.toIso8601String();
-    final nowMs = now.millisecondsSinceEpoch;
-
-    await _supabase.from('request_chat_messages').insert({
-      'conversation_id': conversationId,
-      'request_id': requestId.trim(),
-      'client_email': normalizeEmail(clientEmail),
-      'artist_email': _aiAssistantEmail,
-      'client_name': clientName.trim(),
-      'artist_name': 'JNT Assistant',
-      'text': welcomeText,
-      'sender_email': _aiAssistantEmail,
-      'sender_name': 'JNT Assistant',
-      'attachment_url': '',
-      'attachment_type': '',
-      'attachment_name': '',
-      'is_system': true,
-      'created_at': nowIso,
-      'created_at_ms': nowMs,
-      'updated_at': nowIso,
-    });
-
-    await _supabase.from('request_chats').upsert({
-      'id': conversationId,
-      'conversation_id': conversationId,
-      'request_id': requestId.trim(),
-      'client_email': normalizeEmail(clientEmail),
-      'artist_email': _aiAssistantEmail,
-      'client_name': clientName.trim(),
-      'artist_name': 'JNT Assistant',
-      'participants': <String>[
-        if (normalizeEmail(clientEmail).isNotEmpty) normalizeEmail(clientEmail),
-        _aiAssistantEmail,
-      ],
-      'last_message': welcomeText,
-      'last_sender_email': _aiAssistantEmail,
-      'last_sender_name': 'JNT Assistant',
-      'updated_at': nowIso,
-      'updated_at_ms': nowMs,
-    }, onConflict: 'id');
   }
 
   static Map<String, dynamic> _messageRowToCompat(Map<String, dynamic> row) {
