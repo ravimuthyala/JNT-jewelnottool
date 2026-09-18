@@ -19,6 +19,7 @@ import '../services/supabase_bootstrap.dart';
 import 'jnt_ascension_page.dart';
 import 'notifications_page.dart';
 import 'artist_reviews_page.dart';
+import '../widgets/deactivate_account_flow.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
 import '../widgets/phone_country_code_field.dart';
@@ -1862,31 +1863,75 @@ class _ArtistProfilePageState extends State<ArtistProfilePage> {
                     _jntAscensionTile(context),
 
                     const SizedBox(height: 12),
-                    SizedBox(
-                      width: 180,
-                      height: 42,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.blackCat,
-                          foregroundColor: AppColors.snow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 42,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat,
+                                foregroundColor: AppColors.snow,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: _loggingOutFromProfile
+                                  ? null
+                                  : _logoutFromProfile,
+                              icon: const Icon(Icons.logout_rounded, size: 18),
+                              label: Text(
+                                _loggingOutFromProfile
+                                    ? 'Logging out...'
+                                    : 'Logout',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: AppColors.snow,
+                                  fontFamily: 'Arial',
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                        onPressed: _loggingOutFromProfile
-                            ? null
-                            : _logoutFromProfile,
-                        icon: const Icon(Icons.logout_rounded, size: 18),
-                        label: Text(
-                          _loggingOutFromProfile ? 'Logging out...' : 'Logout',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                            color: AppColors.snow,
-                            fontFamily: 'Arial',
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: SizedBox(
+                            height: 42,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: AppColors.blackCat.withValues(
+                                  alpha: 0.72,
+                                ),
+                                foregroundColor: AppColors.snow,
+                                side: BorderSide(
+                                  color: AppColors.blackCat.withValues(
+                                    alpha: 0.30,
+                                  ),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                              onPressed: () => showDeactivateAccountFlow(
+                                context: context,
+                                onSignedOut: _logoutFromProfile,
+                              ),
+                              child: const Text(
+                                'Deactivate Account',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  fontFamily: 'Arial',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     ],

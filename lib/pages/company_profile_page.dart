@@ -9,6 +9,7 @@ import '../theme/app_colors.dart';
 import 'edit_company_business_info_popup.dart';
 import '../widgets/company_shell_chrome.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/deactivate_account_flow.dart';
 import '../widgets/searchable_dropdown_field.dart';
 import '../utlis/responsive_layout.dart';
 import 'edit_shipping_address_page.dart' show usStates, countries;
@@ -1319,7 +1320,62 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
             const SizedBox(height: 22),
 
-            _TextDangerButton(text: 'Log out', onTap: widget.onLogout),
+            Row(
+              children: [
+                Expanded(
+                  child: _TextDangerButton(
+                    text: 'Log out',
+                    onTap: widget.onLogout,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: 'Deactivate Account',
+                    onTap: () => showDeactivateAccountFlow(
+                      context: context,
+                      onSignedOut: widget.onLogout,
+                    ),
+                    child: ExcludeSemantics(
+                      child: SizedBox(
+                        height: 44,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.blackCat.withValues(
+                              alpha: 0.72,
+                            ),
+                            foregroundColor: AppColors.snow,
+                            side: BorderSide(
+                              color: AppColors.blackCat.withValues(
+                                alpha: 0.30,
+                              ),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: () => showDeactivateAccountFlow(
+                            context: context,
+                            onSignedOut: widget.onLogout,
+                          ),
+                          child: const Text(
+                            'Deactivate Account',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
               ],
             ),
           ),

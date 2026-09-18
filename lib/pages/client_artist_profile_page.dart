@@ -15,6 +15,7 @@ import '../services/auth_email_alias_service.dart';
 import '../theme/app_colors.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/deactivate_account_flow.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
@@ -2683,32 +2684,72 @@ class _ClientArtistProfilePageState extends State<ClientArtistProfilePage> {
               ],
 
               const SizedBox(height: 16),
-              Center(
-                child: SizedBox(
-                  width: 180,
-                  height: 42,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.blackCat,
-                      foregroundColor: AppColors.snow,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    onPressed: () => Navigator.of(
-                      context,
-                    ).pushNamedAndRemoveUntil('/', (route) => false),
-                    child: const Text(
-                      'Log out',
-                      style: TextStyle(
-                        color: AppColors.snow,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                        fontFamily: 'Arial',
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 42,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat,
+                          foregroundColor: AppColors.snow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                        onPressed: () => Navigator.of(
+                          context,
+                        ).pushNamedAndRemoveUntil('/', (route) => false),
+                        child: const Text(
+                          'Log out',
+                          style: TextStyle(
+                            color: AppColors.snow,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: SizedBox(
+                      height: 42,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: AppColors.blackCat.withValues(
+                            alpha: 0.72,
+                          ),
+                          foregroundColor: AppColors.snow,
+                          side: BorderSide(
+                            color: AppColors.blackCat.withValues(alpha: 0.30),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                        ),
+                        onPressed: () => showDeactivateAccountFlow(
+                          context: context,
+                          onSignedOut: () async => Navigator.of(
+                            context,
+                          ).pushNamedAndRemoveUntil('/', (route) => false),
+                        ),
+                        child: const Text(
+                          'Deactivate Account',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            fontFamily: 'Arial',
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
                 ],

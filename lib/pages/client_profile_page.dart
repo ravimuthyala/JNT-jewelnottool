@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utlis/responsive_layout.dart';
 import '../models/client_profile_models.dart';
 import '../widgets/client_profile_avatar_icon.dart';
+import '../widgets/deactivate_account_flow.dart';
 import '../widgets/jnt_modal_app_bar.dart';
 import '../widgets/jnt_standard_app_bar.dart';
 import '../widgets/notification_bell_button.dart';
@@ -1107,18 +1108,47 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
             const SizedBox(height: 22),
 
-            Semantics(
-              button: true,
-              label: 'Log out',
-              onTap: () {
-                widget.onLogout();
-              },
-              child: ExcludeSemantics(
-                child: _TextDangerButton(
-                  text: 'Log out',
-                  onTap: widget.onLogout,
+            Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: 'Log out',
+                    onTap: () {
+                      widget.onLogout();
+                    },
+                    child: ExcludeSemantics(
+                      child: _TextDangerButton(
+                        text: 'Log out',
+                        onTap: widget.onLogout,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label: 'Deactivate Account',
+                    onTap: () => showDeactivateAccountFlow(
+                      context: context,
+                      onSignedOut: widget.onLogout,
+                    ),
+                    child: ExcludeSemantics(
+                      child: _TextDangerButton(
+                        text: 'Deactivate Account',
+                        backgroundColor: AppColors.blackCat.withValues(
+                          alpha: 0.72,
+                        ),
+                        onTap: () => showDeactivateAccountFlow(
+                          context: context,
+                          onSignedOut: widget.onLogout,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1261,32 +1291,39 @@ class _ProfileTopRow extends StatelessWidget {
 }
 
 class _TextDangerButton extends StatelessWidget {
-  const _TextDangerButton({required this.text, required this.onTap});
+  const _TextDangerButton({
+    required this.text,
+    required this.onTap,
+    this.backgroundColor = AppColors.blackCat,
+  });
 
   final String text;
   final Future<void> Function() onTap;
+  final Color backgroundColor;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: SizedBox(
-        height: 52,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.blackCat,
-            foregroundColor: AppColors.snow,
-            padding: const EdgeInsets.symmetric(horizontal: 22),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          ),
-          onPressed: () async => onTap(),
-          child: Text(
-            text,
-            style: const TextStyle(
-              color: AppColors.snow,
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
-              fontFamily: 'Arial',
-            ),
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: AppColors.snow,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        ),
+        onPressed: () async => onTap(),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.snow,
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            fontFamily: 'Arial',
           ),
         ),
       ),
